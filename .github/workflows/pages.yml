@@ -1,0 +1,54 @@
+name: Pages
+
+# Builds the site from the README, the guides and the DX-Ball pan demo.
+# Every pull request builds it; only main deploys it.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: erlang:29
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pandoc
+        run: apt-get update && apt-get install -y --no-install-recommends pandoc
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/rebar3
+            _build/default
+          key: rebar3-otp29-${{ hashFiles('rebar.config', 'rebar.lock') }}
+
+      - name: Build the site
+        run: scripts/build-site.sh _site
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
