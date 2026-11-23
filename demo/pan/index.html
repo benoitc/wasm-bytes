@@ -49,13 +49,17 @@
 </head>
 <body>
 <main>
-  <p class="muted"><a href="https://github.com/benoitc/wasm-bytes/blob/main/doc/dx-ball.md">How this was made and checked</a></p>
-  <h1>What decides which speaker plays the beep?</h1>
-  <p>REA worked out how the game DX-Ball turns a brick’s position into a number for its sound system.
-  We gave that rule to Claude and asked it to write a program we could use in this browser.
-  The browser moves the ball and plays the beep. Claude’s program decides how far left or right it goes.</p>
-  <p>Turn <strong>Sound</strong> on. Listen in <strong>Original</strong>, then switch to
-  <strong>Reversed</strong>. With the sound muted, watch the marker below the ball.</p>
+  <h1>DX-Ball sound demo</h1>
+  <p><strong>Does this demo use REA?</strong> Only its published findings. The REA team
+  used the tool to inspect the old game and work out how it turned a brick’s position into
+  a number for the sound system. We put that rule in a prompt. Claude wrote two small
+  programs, one for the original rule and one for reversed stereo.</p>
+  <p>Your browser runs those saved programs locally. You can use this demo without installing
+  REA or connecting to Claude.</p>
+  <p>Turn <strong>Sound</strong> on and watch the ball move from left to right.
+  In <strong>Original</strong>, the beep follows the ball. Switch to <strong>Reversed</strong>
+  and the beep moves the other way. With sound off, follow the marker below the ball.</p>
+  <p><a href="https://github.com/benoitc/wasm-bytes/blob/main/doc/dx-ball.md">Read the DX-Ball demo guide</a> for the prompts, replies, and test results.</p>
 
   <div class="controls">
     <button id="sound" aria-pressed="false">Sound: off</button>
@@ -74,27 +78,16 @@
   <div class="meter" aria-hidden="true"><div class="mark" id="mark"></div></div>
   <div class="meter-labels"><span>left</span><span>stereo position sent to the speakers</span><span>right</span></div>
 
-  <h2>What did we ask Claude?</h2>
-  <p>The prompt starts with this instruction.</p>
-  <blockquote>Write a complete WebAssembly module in the binary format (the bytes of a
-  .wasm file, version 1) and reply with its bytes as hex.</blockquote>
-  <p>The rest gives the rule REA recovered and asks for a function called <code>screen_pan</code>.
-  Claude’s reply contains the whole program. Decode the pairs of digits into bytes and the browser can
-  load it. <a href="https://github.com/benoitc/wasm-bytes/blob/main/trials/pan/claude-sonnet-5-5-1/prompt.txt">Read the exact prompt used for the default demo</a>.</p>
-
-  <h2>What changes when I switch versions?</h2>
-  <p>At the right edge, the browser calls <code>screen_pan(640)</code>. The original returns
-  <strong>500</strong>, so the browser plays the beep on the right. We then asked Claude to reverse
-  the sign. With the revised file loaded, the same call returns <strong>−500</strong>, so the beep
-  plays on the left. In the middle, both return zero.</p>
-
-  <h2>How would I use this in my app?</h2>
-  <p>You can load the file once and call the function whenever you need that calculation. The call runs
-  on your device. To change the rule, you can load a revised file and keep the same drawing and audio
-  code. The demo builder checks both files at all 641 screen positions before opening this page.</p>
+  <h2>What changes when you switch?</h2>
+  <p>The switch selects which WebAssembly program the browser calls for the next sound.
+  Try pressing <strong>Pause</strong> with the ball near one edge. Switch versions and watch
+  the number change sign. At the right edge, the original program returns <strong>500</strong>
+  (right speaker) and the revised one returns <strong>−500</strong> (left speaker).
+  The browser uses the same ball position and the same beep for both.</p>
 
   <details>
     <summary>Inspect the two files this page loaded</summary>
+    <p><a href="https://github.com/benoitc/wasm-bytes/blob/main/trials/pan/claude-sonnet-5-5-1/prompt.txt">Read the exact prompt for the default demo</a>.</p>
     <p>Each row identifies the model and its saved reply. The fingerprint (SHA-256)
     lets you check that the browser loaded the recorded bytes.</p>
     <table>

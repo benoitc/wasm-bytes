@@ -70,7 +70,7 @@ bin/wasm-bytes check digits trials/digits/claude-haiku-5-5-1/reply.txt
 
 ## How we reused a DX-Ball sound rule
 
-**What REA did.** REA inspected the old DX-Ball game and recovered the calculation behind a brick-hit sound. Give the calculation the brick’s horizontal position and it returns a number for the sound system. In our browser demo, −500 means the left speaker, 0 means the middle, and 500 means the right speaker. [REA case study](https://github.com/morluto/rea#dx-ball-reconstruct-a-sound-pan-calculation)
+**What REA did.** The REA team used its tool to inspect the old DX-Ball game and published the rule that turns a brick’s position into a number for the sound system. We used their write-up to design this experiment. You can build and run the demo without REA. In our browser demo, −500 means the left speaker, 0 means the middle, and 500 means the right speaker. [REA case study](https://github.com/morluto/rea#dx-ball-reconstruct-a-sound-pan-calculation)
 
 **What we asked Claude to do.** We put REA’s calculation in a prompt and asked Claude to write a function called `screen_pan` that our app could load. Here is the opening instruction from the prompt. “Write a complete WebAssembly module in the binary format (the bytes of a .wasm file, version 1) and reply with its bytes as hex.” [Full prompt](trials/pan/claude-sonnet-5-5-1/prompt.txt)
 

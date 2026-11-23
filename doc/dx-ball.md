@@ -2,7 +2,7 @@
 
 In DX-Ball, a ball hits a brick and the game plays a sound. We wanted to reuse one part of that feature in a browser app: given the position of the hit, how far left or right should the sound play?
 
-**REA figured out the rule in the old game. We gave that rule to Claude, which wrote a small program our app can call.** The browser draws the ball and plays the beep. Claude’s program does one calculation in between.
+**Do you need REA to run this? No.** The REA team used it earlier to study the old game and published the sound rule they found. We used their write-up to prompt Claude and saved the two programs it produced. When you open the demo, your browser runs those files locally. Switching versions takes effect immediately, without calling REA or Claude.
 
 ## What did REA do?
 
