@@ -84,6 +84,21 @@ To hear it, run the command below, turn **Sound** on, and switch from **Original
 bin/wasm-bytes pan-demo
 ```
 
+## Can the model write the demo page too?
+
+The page that moves the ball and plays the beeps was written by hand. We also asked each model to write that page as one HTML file. The prompt fixes how the page gets the recorded modules and which buttons it needs. It also asks the page to work on an iPhone with the silent switch on. A browser check then drives each page in Chrome. It records every call to `screen_pan` and every beep the page plays, then swaps in stand-in modules to confirm the page doesn't compute the pan itself. All three recorded pages passed every check. You can open them on the site. [Prompt](prompts/ui.txt) · [Pages the models wrote](https://benoitc.github.io/wasm-bytes/demo/ui/) · [How a page is checked](doc/ui.md)
+
+The check needs Node and Chrome:
+
+```sh
+bin/wasm-bytes check ui trials/ui/claude-sonnet-5-5-1/reply.txt
+```
+
+```text
+  check    ok   uses_module: with stand-in modules returning 250 and -125: original shown and played, reversed shown and played
+  verdict  pass
+```
+
 ## Try your own model
 
 1. **Send the write prompt.** Run the command below and paste its entire output into your model. This includes the retry rule, the required function signature, and the instructions for formatting the reply. For a small or local model, add `--guided`. That version includes the byte of each instruction and a step-by-step method. [Guided prompts](trials/README.md#use-the-guided-prompt)

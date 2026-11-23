@@ -12,6 +12,8 @@
 | `interface_mismatch` | The module validates but has the wrong shape for this task. | Read `profile`. The module must contain exactly one function, export it under the task's name (`retry` or `digit_sum`) with one 32-bit integer argument and result, and have no other exports, imports, memory, or start function. |
 | `execution_failure` | The module could not start, or a call failed to return a result. | Read `failed` for a trap, fuel exhaustion, deadline, or instantiation error. |
 | `wrong_answer` | The function ran and at least one answer differed from the reference. | Read `wrong` for the inputs, expected values, and actual results. |
+| `not_html` | A `ui` reply is not an HTML document, for example because it is wrapped in a code fence. | The report quotes how the reply starts. |
+| `ui_failed` | A `ui` page loaded, and at least one browser check failed. | Read the `check` lines marked `FAIL`. [Browser checks](ui.md#check-a-page) |
 | `runner_error` | The checker or its WebAssembly runtime encountered an internal error. | Keep the diagnostic when reporting the problem. The reply has no score. |
 
 For scripts, `check` exits with 0 on a pass, 1 for a failed reply or refused revision base, and 2 for a runner or invocation error. To check pasted text, run `bin/wasm-bytes check write -`, paste the reply, then press Ctrl-D on a new line. Keep a copy if you plan to revise it.
