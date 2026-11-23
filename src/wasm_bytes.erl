@@ -12,23 +12,37 @@
 %% REPLY is a file, or `-' for standard input.
 -module(wasm_bytes).
 
--export([main/1, demo/1, render_revise_prompt/2]).
+-export([main/1, run/2, demo/1, render_revise_prompt/2]).
 
 -define(PLACEHOLDER, <<"{{MODULE_HEX}}">>).
 
 -spec main([string()]) -> no_return().
 main(Args) ->
+    erlang:halt(run(Args, standard_error)).
+
+%% Runs one command and answers its exit status. Errors go to `Err', an IO
+%% device; the tests pass one that collects them.
+-spec run([string()], io:device()) -> 0 | 1 | 2.
+run(Args, Err) ->
     {ok, _} = application:ensure_all_started(wasm),
-    Code = try command(Args)
-           catch
-               throw:{usage, Msg} ->
-                   io:put_chars(standard_error, [Msg, "\n\n", usage()]),
-                   2;
-               throw:{fail, Msg} ->
-                   io:put_chars(standard_error, [Msg, "\n"]),
-                   2
-           end,
-    erlang:halt(Code).
+    put(wasm_bytes_err, Err),
+    try command(Args)
+    catch
+        throw:{usage, Msg} ->
+            err([Msg, "\n\n", usage()]),
+            2;
+        throw:{fail, Msg} ->
+            err([Msg, "\n"]),
+            2
+    after
+        erase(wasm_bytes_err)
+    end.
+
+err(Chars) ->
+    io:put_chars(case get(wasm_bytes_err) of
+                     undefined -> standard_error;
+                     Dev -> Dev
+                 end, Chars).
 
 command(["replay"]) ->
     {Out, Ok} = wb_replay:run(root()),
@@ -69,7 +83,7 @@ command(["prompt", "revise", "--base", Base]) ->
             io:put_chars(Prompt),
             0;
         {error, Report} ->
-            io:put_chars(standard_error, wb_report:base_refused(list_to_binary(Base), Report)),
+            err(wb_report:base_refused(list_to_binary(Base), Report)),
             1
     end;
 command(["help"]) ->

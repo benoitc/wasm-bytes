@@ -23,7 +23,8 @@
                   export := binary(),
                   params := [atom()],
                   results := [atom()],
-                  prompt := file:filename()}.
+                  prompt := file:filename(),
+                  guided => file:filename()}.
 
 -spec names() -> [name()].
 names() -> [write, revise, digits].

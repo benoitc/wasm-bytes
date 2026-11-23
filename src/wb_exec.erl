@@ -57,6 +57,22 @@ run(Module, Export, Inputs, Opts) ->
     end.
 
 calls(Module, Export, Inputs, Cfg) ->
+    case instantiates(Module, Cfg) of
+        ok -> start_and_call(Module, Export, Inputs, Cfg);
+        {error, Why} -> {error, {instantiate, Why}}
+    end.
+
+%% The worker instantiates the module after it has started, so a module that
+%% cannot be instantiated shows up as a worker that dies on every call. Trying
+%% once here first reports the reason instead. No guest code runs: the profile
+%% allows no start function.
+instantiates(Module, #{fuel := Fuel}) ->
+    case wasm:instantiate(Module, #{}, wasm_limits:merge(wasm_limits:untrusted(), #{fuel => Fuel})) of
+        {ok, Inst} -> wasm:destroy(Inst);
+        {error, _} = E -> E
+    end.
+
+start_and_call(Module, Export, Inputs, Cfg) ->
     case start(Module, Cfg) of
         {ok, W} ->
             {Results, Last} = loop(Inputs, W, Export, Cfg#{module => Module}, 0, []),
