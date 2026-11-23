@@ -11,6 +11,110 @@ const BEEP_MS = 90;
 const PAN_RANGE = 500;      // the recovered function's results run from -500 to 500
 
 const $ = (id) => document.getElementById(id);
+const clamp = (v) => Math.max(-1, Math.min(1, v));
+
+// Sound, written for Safari on iOS as well as for desktop browsers.
+// - The audio context is created and resumed inside the tap that turns sound
+//   on, before anything is awaited: Safari only starts audio from a gesture.
+// - iOS plays Web Audio on the ringer channel, which the silent switch mutes,
+//   unless the page asks for media playback: through navigator.audioSession
+//   where Safari has it, otherwise by playing a silent <audio> element.
+// - A context interrupted by a call or by leaving the page resumes on the
+//   next tap.
+const AudioCtx = window.AudioContext || window.webkitAudioContext;
+
+function silentWavUrl() {
+  const samples = 2000;                       // a quarter second at 8 kHz
+  const buf = new ArrayBuffer(44 + samples);
+  const v = new DataView(buf);
+  const text = (at, s) => { for (let i = 0; i < s.length; i++) v.setUint8(at + i, s.charCodeAt(i)); };
+  text(0, "RIFF"); v.setUint32(4, 36 + samples, true); text(8, "WAVE"); text(12, "fmt ");
+  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, 8000, true); v.setUint32(28, 8000, true);
+  v.setUint16(32, 1, true); v.setUint16(34, 8, true);
+  text(36, "data"); v.setUint32(40, samples, true);
+  for (let i = 0; i < samples; i++) v.setUint8(44 + i, 128);   // 8-bit silence
+  return URL.createObjectURL(new Blob([buf], { type: "audio/wav" }));
+}
+
+const sound = {
+  ctx: null,
+  on: false,
+  keepAlive: null,
+
+  // Called from the tap itself, so nothing here may wait.
+  set(on) {
+    if (on) {
+      this.mediaPlayback();
+      if (!this.ctx) this.ctx = new AudioCtx();
+      this.resume();
+    } else {
+      if (this.ctx) this.ctx.suspend();
+      if (this.keepAlive) this.keepAlive.pause();
+    }
+    this.on = on;
+  },
+
+  mediaPlayback() {
+    try {
+      if (navigator.audioSession) {
+        navigator.audioSession.type = "playback";
+        return;
+      }
+    } catch (e) { /* fall back to the media element */ }
+    if (!this.keepAlive) {
+      this.keepAlive = new Audio(silentWavUrl());
+      this.keepAlive.loop = true;
+      this.keepAlive.setAttribute("playsinline", "");
+    }
+    const played = this.keepAlive.play();
+    if (played && played.catch) played.catch(() => {});
+  },
+
+  resume() {
+    if (!this.ctx) return;
+    const resumed = this.ctx.resume();
+    if (resumed && resumed.catch) resumed.catch(() => {});
+    if (this.keepAlive && this.keepAlive.paused) {
+      const played = this.keepAlive.play();
+      if (played && played.catch) played.catch(() => {});
+    }
+  },
+
+  running() {
+    return this.on && this.ctx !== null && this.ctx.state === "running";
+  },
+
+  // The same beep in both modes; only the pan differs, and only because a
+  // different module returned it. Built with the factory methods, which older
+  // Safari has, with an equal-power panner where StereoPannerNode is missing.
+  beep(pan) {
+    if (!this.running()) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    osc.type = "sine";
+    osc.frequency.value = BEEP_HZ;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0, t);
+    gain.gain.linearRampToValueAtTime(BEEP_GAIN, t + 0.005);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + BEEP_MS / 1000);
+    let panner;
+    if (ctx.createStereoPanner) {
+      panner = ctx.createStereoPanner();
+      panner.pan.value = pan;
+    } else {
+      panner = ctx.createPanner();
+      panner.panningModel = "equalpower";
+      panner.setPosition(pan, 0, 1 - Math.abs(pan));
+    }
+    osc.connect(gain);
+    gain.connect(panner);
+    panner.connect(ctx.destination);
+    osc.start(t);
+    osc.stop(t + BEEP_MS / 1000 + 0.02);
+  },
+};
 
 function bytesOf(base64) {
   const text = atob(base64);
@@ -49,7 +153,6 @@ async function main() {
   $("modules").append(moduleRow(original), moduleRow(reversed));
 
   let active = original;
-  let audio = null;
   let playing = true;
   let started = performance.now();
   let pausedAt = 0;
@@ -63,39 +166,23 @@ async function main() {
   $("mode-original").onclick = () => setMode(original);
   $("mode-reversed").onclick = () => setMode(reversed);
 
-  $("sound").onclick = async () => {
-    if (!audio) audio = new AudioContext();
-    if (audio.state === "running") {
-      await audio.suspend();
-    } else {
-      await audio.resume();
-    }
-    const on = audio.state === "running";
-    $("sound").textContent = on ? "Sound: on" : "Sound: off";
-    $("sound").setAttribute("aria-pressed", String(on));
+  // Synchronous on purpose: Safari keeps the gesture only until the first
+  // await.
+  $("sound").onclick = () => {
+    sound.set(!sound.on);
+    $("sound").textContent = sound.on ? "Sound: on" : "Sound: off";
+    $("sound").setAttribute("aria-pressed", String(sound.on));
   };
+  document.addEventListener("pointerdown", () => { if (sound.on) sound.resume(); });
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden && sound.on) sound.resume();
+  });
 
   $("motion").onclick = () => {
     playing = !playing;
     if (playing) started += performance.now() - pausedAt; else pausedAt = performance.now();
     $("motion").textContent = playing ? "Pause" : "Play";
   };
-
-  // The same beep in both modes; only the pan differs, and only because a
-  // different module returned it.
-  function beep(value) {
-    if (!audio || audio.state !== "running") return;
-    const t = audio.currentTime;
-    const osc = new OscillatorNode(audio, { type: "sine", frequency: BEEP_HZ });
-    const gain = new GainNode(audio, { gain: 0 });
-    const pan = new StereoPannerNode(audio, { pan: Math.max(-1, Math.min(1, value / PAN_RANGE)) });
-    gain.gain.setValueAtTime(0, t);
-    gain.gain.linearRampToValueAtTime(BEEP_GAIN, t + 0.005);
-    gain.gain.exponentialRampToValueAtTime(0.0001, t + BEEP_MS / 1000);
-    osc.connect(gain).connect(pan).connect(audio.destination);
-    osc.start(t);
-    osc.stop(t + BEEP_MS / 1000 + 0.02);
-  }
 
   function frame(now) {
     const elapsed = (playing ? now : pausedAt) - started;
@@ -111,11 +198,11 @@ async function main() {
     // Beside the ball, but never past either side of the stage.
     const half = reading.offsetWidth / 2 + 8;
     reading.style.left = Math.max(half, Math.min(stage - half, left)) + "px";
-    $("mark").style.left = (50 + 50 * Math.max(-1, Math.min(1, value / PAN_RANGE))) + "%";
+    $("mark").style.left = (50 + 50 * clamp(value / PAN_RANGE)) + "%";
 
     if (playing && phase < SWEEP_MS && elapsed - lastBeep >= BEEP_EVERY_MS) {
       lastBeep = elapsed;
-      beep(value);
+      sound.beep(clamp(value / PAN_RANGE));
     }
     requestAnimationFrame(frame);
   }
