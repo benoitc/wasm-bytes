@@ -122,6 +122,12 @@ The program ran, but it declined to retry status 599. That single input is enoug
 - Read the recorded trials and their limits. Opus and Sonnet passed every task on their recorded attempts. A local model run through Ollama failed both tasks with the baseline prompts, then passed `digit_sum` with the guided prompt. [Project status](doc/status.md)
 - Save a run from your own model so someone else can replay it. [Record a trial](trials/README.md)
 
+## Watch the retry rule change
+
+![Animated replay of Sonnet’s 54-byte module and its 68-byte revision. The revised function retries status 408, stops on 501, and still retries 429.](doc/media/retry-replay.gif)
+
+Gold highlights the bytes Sonnet changed or added. The calls on the right show what the weather app receives from each version. [Original reply](trials/write/claude-sonnet-5-5-1/reply.txt) · [Revision request](trials/revise/claude-sonnet-5-5-1/prompt.txt) · [Revised reply](trials/revise/claude-sonnet-5-5-1/reply.txt)
+
 ## License
 
 Apache License 2.0, the same license as erlang_wasm. [License](LICENSE)
