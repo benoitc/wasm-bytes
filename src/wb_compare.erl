@@ -7,7 +7,7 @@
 %% file was named.
 -module(wb_compare).
 
--export([compare/3, report/1, record/2]).
+-export([compare/3, report/1, record/2, summarize/1]).
 
 -export_type([comparison/0]).
 
@@ -37,23 +37,21 @@ run(Task, Text, Bytes, Exe, ReplyName) ->
                end,
     Rows = [{X, wb_task:expected(Task, X), E, W}
             || {{X, E}, {X, W}} <- lists:zip(Erlang, Wasmtime)],
-    Total = length(Inputs),
-    ErlMatches = length([X || {X, R, {ok, R}, _} <- Rows]),
-    WtMatches = length([X || {X, R, _, {ok, R}} <- Rows]),
+    #{erlang_matches := ErlMatches, wasmtime_matches := WtMatches} = S = summarize(Rows),
     #{task => Task,
       reply => ReplyName,
       module_bytes => byte_size(Bytes),
       module_sha256 => sha256(Bytes),
-      inputs => Total,
+      inputs => length(Inputs),
       erlang_wasm => #{version => vsn(wasm), verdict => maps:get(verdict, Check),
                        received_sha256 => sha256(maps:get(bytes, Check, <<>>)),
                        matches => ErlMatches},
       wasmtime => #{version => wb_wasmtime:version(Exe),
                     received_sha256 => sha256(OnDisk),
                     matches => WtMatches},
-      agree => length([R || {_, _, E, W} = R <- Rows, agree(E, W)]),
-      first_discrepancy => first_discrepancy(Rows),
-      verdict => verdict(Rows, Total, ErlMatches, WtMatches),
+      agree => maps:get(agree, S),
+      first_discrepancy => maps:get(first_discrepancy, S),
+      verdict => maps:get(verdict, S),
       host => wb_host:info(),
       recorded_on => today()}.
 
@@ -69,6 +67,19 @@ erlang_outcomes(#{results := Results}, Inputs) when length(Results) =:= length(I
          end} || {X, O} <- Results];
 erlang_outcomes(#{verdict := V}, Inputs) ->
     [{X, {rejected, V}} || X <- Inputs].
+
+%% The scoring, apart from running anything: `Rows' are
+%% `{Input, Reference, ErlangWasm, Wasmtime}'.
+-spec summarize([{integer(), integer(), outcome(), outcome()}]) -> map().
+summarize(Rows) ->
+    Total = length(Rows),
+    ErlMatches = length([X || {X, R, {ok, R}, _} <- Rows]),
+    WtMatches = length([X || {X, R, _, {ok, R}} <- Rows]),
+    #{erlang_matches => ErlMatches,
+      wasmtime_matches => WtMatches,
+      agree => length([Row || {_, _, E, W} = Row <- Rows, agree(E, W)]),
+      first_discrepancy => first_discrepancy(Rows),
+      verdict => verdict(Rows, Total, ErlMatches, WtMatches)}.
 
 %% `pass': both engines give the reference answer on every input.
 %% `engines_differ': on some input the two engines do not agree.

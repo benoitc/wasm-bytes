@@ -41,3 +41,7 @@ encode_writes_sixteen_pairs_a_line_test() ->
     Lines = string:split(iolist_to_binary(wb_hex:encode(list_to_binary(lists:seq(0, 33)))),
                          "\n", all),
     ?assertEqual([16, 16, 2], [length(string:split(L, " ", all)) || L <- Lines, L =/= <<>>]).
+
+%% Bytes that are not UTF-8 are read one per column.
+not_utf8_test() ->
+    ?assertEqual({error, {not_hex, 1, 4, 16#ff}}, wb_hex:decode(<<"00 ", 16#ff>>)).

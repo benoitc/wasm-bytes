@@ -2,7 +2,7 @@
 %% Erlang release. No host name or user name is read.
 -module(wb_host).
 
--export([info/0, describe/1, slug/1]).
+-export([info/0, describe/1, slug/1, pretty_name/1]).
 
 -spec info() -> map().
 info() ->
@@ -45,6 +45,8 @@ os_name() ->
             iolist_to_binary(io_lib:format("~p/~p", [Family, Name]))
     end.
 
+%% The `PRETTY_NAME' of an os-release file.
+-spec pretty_name(binary()) -> binary().
 pretty_name(Bin) ->
     case [L || L <- string:split(Bin, "\n", all), string:prefix(L, "PRETTY_NAME=") =/= nomatch] of
         [Line | _] -> string:trim(string:prefix(Line, "PRETTY_NAME="), both, "\"");
