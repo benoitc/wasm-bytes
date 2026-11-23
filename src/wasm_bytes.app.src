@@ -2,7 +2,9 @@
     {description, "Language models write WebAssembly binaries; erlang_wasm checks them"},
     {vsn, "0.1.0"},
     {registered, []},
-    {applications, [kernel, stdlib, wasm]},
+    {applications, [kernel, stdlib, crypto, wasm]},
     {env, []},
-    {modules, []}
+    {modules, []},
+    {licenses, ["Apache-2.0"]},
+    {links, [{"GitHub", "https://github.com/benoitc/wasm-bytes"}]}
 ]}.

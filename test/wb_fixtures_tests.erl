@@ -23,6 +23,7 @@ fixtures_test_() ->
       {"the rendered revise prompt matches the template", fun rendered_prompt/0},
       {"each trial's prompt is the one the runner gives", fun trial_prompts/0},
       {"grouped output names every wrong input", fun grouped_output/0},
+      {"the guided prompts share one reference card and give no answer away", fun guided_prompts/0},
       {"the demo answers 0", {timeout, 60, fun demo/0}}]}.
 
 root() ->
@@ -45,8 +46,8 @@ revision(Label) ->
 labelled() ->
     [begin
          Got = case Task of
-                   write ->
-                       maps:get(verdict, wb_check:check(write, Reply));
+                   _ when Task =/= revise ->
+                       maps:get(verdict, wb_check:check(Task, Reply));
                    revise ->
                        {ok, _, Base} = wb_fixture:base_reply(root(), F),
                        {ok, #{revised := R}} = wb_check:check_revision(Base, Reply),
@@ -94,7 +95,7 @@ accepted() ->
     R = check(write, ~"accepted"),
     ?assertMatch(#{verdict := pass, failures := [], wrong := []}, R),
     ?assertEqual(54, byte_size(maps:get(bytes, R))),
-    ?assertEqual(length(wb_task:inputs()), length(maps:get(results, R))).
+    ?assertEqual(length(wb_task:inputs(write)), length(maps:get(results, R))).
 
 misses_599() ->
     ?assertMatch(#{verdict := wrong_answer, failures := [], wrong := [{599, 1, 0}]},
@@ -103,7 +104,7 @@ misses_599() ->
 loops() ->
     #{verdict := execution_failure, failures := Failures, wrong := []} =
         check(write, ~"loops-on-negative"),
-    ?assertEqual([X || X <- wb_task:inputs(), X < 0], [X || {X, _} <- Failures]),
+    ?assertEqual([X || X <- wb_task:inputs(write), X < 0], [X || {X, _} <- Failures]),
     ?assert(lists:all(fun({_, #{kind := K}}) -> K =:= out_of_fuel end, Failures)).
 
 truncated() ->
@@ -148,11 +149,17 @@ wat_matches_hex() ->
          {ok, Bytes} = wb_hex:decode(Text),
          {ok, FromWat} = wasm:compile({wat, Src}),
          {ok, FromHex} = wasm:compile(Bytes),
-         ?assertEqual({Dir, outcomes(FromWat)}, {Dir, outcomes(FromHex)})
+         Task = task_of(Dir),
+         ?assertEqual({Dir, outcomes(Task, FromWat)}, {Dir, outcomes(Task, FromHex)})
      end || Wat <- Dirs].
 
-outcomes(Module) ->
-    {ok, Results} = wb_exec:run(Module, ~"retry", wb_task:inputs()),
+task_of(Dir) ->
+    Name = filename:basename(filename:dirname(Dir)),
+    hd([T || T <- wb_task:names(), atom_to_list(T) =:= Name]).
+
+outcomes(Task, Module) ->
+    #{export := Export} = wb_task:get(Task),
+    {ok, Results} = wb_exec:run(Module, Export, wb_task:inputs(Task)),
     [case O of
          {ok, V} -> {X, V};
          {error, #{class := C, kind := K}} -> {X, C, K}
@@ -166,20 +173,40 @@ rendered_prompt() ->
     ?assertEqual(nomatch, binary:match(Saved, ~"{{")).
 
 trial_prompts() ->
-    {ok, Write} = file:read_file(filename:join([root(), "prompts", "write.txt"])),
     Trials = [F || #{kind := trials} = F <- wb_fixture:all(root())],
+    ?assert(length([T || #{task := digits} = T <- Trials]) >= 3),
     [case F of
-         #{task := write, prompt := Prompt} ->
-             ?assertEqual({Label, Write}, {Label, Prompt});
          #{task := revise, prompt := Prompt} ->
              {ok, _, Base} = wb_fixture:base_reply(root(), F),
              {ok, Rendered} = wasm_bytes:render_revise_prompt(root(), Base),
-             ?assertEqual({Label, iolist_to_binary(Rendered)}, {Label, Prompt})
+             ?assertEqual({Label, iolist_to_binary(Rendered)}, {Label, Prompt});
+         #{task := Task, prompt := Prompt, config := C} ->
+             %% A one-prompt task: the prompt file for its variant, as it is.
+             {ok, File} = wb_task:prompt(Task, maps:get(prompt_variant, C, baseline)),
+             {ok, Want} = file:read_file(filename:join(root(), File)),
+             ?assertEqual({Task, Label, Want}, {Task, Label, Prompt})
      end || #{label := Label} = F <- Trials].
+
+guided_prompts() ->
+    Cards = [begin
+                 {ok, P} = wb_task:prompt(T, guided),
+                 {ok, Bin} = file:read_file(filename:join(root(), P)),
+                 {ok, Base} = file:read_file(filename:join(root(), element(2, wb_task:prompt(T, baseline)))),
+                 %% The guided prompt is the baseline with the card inserted.
+                 [Head, _] = binary:split(Base, ~"Reply with only the bytes"),
+                 ?assertEqual(Head, binary:part(Bin, 0, byte_size(Head))),
+                 [Card, _] = binary:split(binary:part(Bin, byte_size(Head), byte_size(Bin) - byte_size(Head)),
+                                          ~"Reply with only the bytes"),
+                 Card
+             end || T <- [write, digits]],
+    [Card, Card] = Cards,
+    %% No constant the tasks need appears encoded in the card.
+    [?assertEqual({Bytes, nomatch}, {Bytes, binary:match(Card, Bytes)})
+     || Bytes <- [~"ad 03", ~"f4 03", ~"e4 00", ~"98 03", ~"f5 03", ~"41 0a"]].
 
 grouped_output() ->
     Wrong = [{X, wb_task:expected(write, X), 1 - wb_task:expected(write, X)}
-             || X <- wb_task:inputs(), X =/= 429, X =/= 599],
+             || X <- wb_task:inputs(write), X =/= 429, X =/= 599],
     Text = iolist_to_binary(wb_report:report(#{task => write, verdict => wrong_answer,
                                                 text_bytes => 0, bytes => <<>>,
                                                 results => [], failures => [],

@@ -2,7 +2,10 @@
 # Records one model trial through the Claude Code CLI, headless.
 #
 #   scripts/record-claude-trial.sh write  LABEL MODEL
+#   scripts/record-claude-trial.sh digits LABEL MODEL
 #   scripts/record-claude-trial.sh revise LABEL MODEL write/BASE-LABEL
+#
+# PROMPT=guided sends the guided prompt of a write or digits task.
 #
 # Writes trials/TASK/LABEL/ with the exact prompt sent (prompt.txt), the
 # reply as the CLI returned it (reply.txt), the model and token counts the
@@ -19,11 +22,16 @@ SYSTEM="You are a helpful assistant."
 if [ -e "$DIR" ]; then echo "$DIR exists" >&2; exit 2; fi
 mkdir -p "$DIR"
 case $TASK in
-    write) cp "$ROOT/prompts/write.txt" "$DIR/prompt.txt" ;;
+    write|digits)
+        case ${PROMPT:-baseline} in
+            baseline) "$ROOT/bin/wasm-bytes" prompt "$TASK" > "$DIR/prompt.txt" ;;
+            guided) "$ROOT/bin/wasm-bytes" prompt "$TASK" --guided > "$DIR/prompt.txt" ;;
+            *) echo "PROMPT is baseline or guided" >&2; exit 2 ;;
+        esac ;;
     revise)
         [ -n "$BASE" ] || { echo "revise needs a base, such as write/LABEL" >&2; exit 2; }
         "$ROOT/bin/wasm-bytes" prompt revise --base "$ROOT/trials/$BASE/reply.txt" > "$DIR/prompt.txt" ;;
-    *) echo "task is write or revise" >&2; exit 2 ;;
+    *) echo "task is write, digits or revise" >&2; exit 2 ;;
 esac
 
 EMPTY=$(mktemp -d)
@@ -59,8 +67,14 @@ erl -noshell -eval '
     halt().' -extra "$EMPTY/out.json" "$DIR" > "$EMPTY/model"
 rm -f "$EMPTY/out.json"
 
-if [ "$TASK" = write ]; then
-    OUT=$("$ROOT/bin/wasm-bytes" check write "$DIR/reply.txt" || true)
+# The hash of the module the reply decodes to, as shasum writes it, so any
+# engine or platform can be checked against the exact bytes.
+if "$ROOT/bin/wasm-bytes" trace "$DIR" --wasm "$EMPTY/module.wasm" >/dev/null 2>&1; then
+    (cd "$EMPTY" && shasum -a 256 module.wasm) > "$DIR/module.sha256"
+fi
+
+if [ "$TASK" != revise ]; then
+    OUT=$("$ROOT/bin/wasm-bytes" check "$TASK" "$DIR/reply.txt" || true)
 else
     OUT=$("$ROOT/bin/wasm-bytes" check revise "$DIR/reply.txt" --base "$ROOT/trials/$BASE/reply.txt" || true)
 fi
@@ -73,6 +87,7 @@ VERDICT=$(printf '%s\n' "$OUT" | awk '$1 == "verdict" {print $2}' | tail -1)
     echo "{recorded_on, \"$(date +%F)\"}."
     echo "{expect, $VERDICT}.          % the verdict the runner gave when this was recorded"
     if [ "$TASK" = revise ]; then echo "{base, \"$BASE\"}."; fi
+    if [ "${PROMPT:-baseline}" = guided ]; then echo "{prompt_variant, guided}."; fi
 } > "$DIR/fixture.config"
 rm -rf "$EMPTY"
 

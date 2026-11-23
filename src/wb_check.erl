@@ -96,7 +96,7 @@ profile(Task, Bytes, Module, R) ->
 
 run(Task, Module, R) ->
     #{export := Export} = wb_task:get(Task),
-    case wb_exec:run(Module, Export, wb_task:inputs()) of
+    case wb_exec:run(Module, Export, wb_task:inputs(Task)) of
         {error, {instantiate, Why}} ->
             R#{verdict => execution_failure, results => [],
                failures => [{instantiate, Why}], wrong => []};

@@ -82,9 +82,9 @@ profile(#{task := Task, results := _}) ->
 profile(_) ->
     [].
 
-calls(#{results := Results, failures := Failures, wrong := Wrong}) ->
+calls(#{task := Task, results := Results, failures := Failures, wrong := Wrong}) ->
     #{fuel := Fuel, deadline_ms := Deadline} = wb_exec:limits(),
-    Total = length(wb_task:inputs()),
+    Total = length(wb_task:inputs(Task)),
     Matched = length(Results) - length(Failures) - length(Wrong),
     [line("calls", io_lib:format("~b inputs, each in a fresh instance; fuel ~b and a ~b ms "
                                  "deadline per call", [Total, Fuel, Deadline])),
@@ -186,7 +186,7 @@ bytes_lines(Mark, Bin) ->
     [line("", [Mark, string:trim(L)]) || L <- string:split(iolist_to_binary(wb_hex:encode(Bin)), "\n", all), L =/= <<>>].
 
 changes(#{changes := Changes, intended := Intended}) ->
-    Total = length(wb_task:inputs()),
+    Total = length(wb_task:inputs(revise)),
     Requested = [X || {X, _, _} <- Intended],
     [line("changes", io_lib:format("~b of ~b inputs changed result", [length(Changes), Total])),
      [line("", [io_lib:format("~b: ", [X]), outcome(B), " -> ", outcome(A),

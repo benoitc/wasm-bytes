@@ -1,0 +1,27 @@
+Write a complete WebAssembly module in the binary format (the bytes of a
+.wasm file, version 1) and reply with its bytes as hex.
+
+The module exports one function, named "digit_sum", with one i32 parameter
+and one i32 result:
+
+  digit_sum(x) returns the sum of the decimal digits of x.
+  For a negative x it uses the digits of -x: digit_sum(-907) is 16.
+  For the smallest i32, -2147483648, it returns 47, the digit sum of
+  2147483648.
+  For example, digit_sum(0) is 0 and digit_sum(1234567890) is 45.
+
+The module has exactly one function, the exported one, and exports nothing
+else. It has no imports, no memory and no start function.
+
+You write every byte: the magic number and version, every section id, every
+section length, every function body length, every local declaration and
+every instruction. Nothing will be added to your bytes and no length will be
+corrected: the bytes you send are the bytes that run.
+
+Reply with only the bytes, as pairs of hexadecimal digits, for example:
+
+0f a0 7c
+
+Whitespace and line breaks between pairs are allowed. Do not split a pair.
+Do not add anything else: no explanation, no code fence, no 0x prefix, no
+comments.
