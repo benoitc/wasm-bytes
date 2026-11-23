@@ -6,8 +6,8 @@
 
 %% `Parts' maps a section name to its entries, already encoded.
 module(Parts) ->
-    Order = [{type, 1}, {import, 2}, {function, 3}, {memory, 5}, {global, 6},
-             {export, 7}, {start, 8}, {code, 10}],
+    Order = [{type, 1}, {import, 2}, {function, 3}, {table, 4}, {memory, 5},
+             {global, 6}, {export, 7}, {start, 8}, {elem, 9}, {code, 10}],
     Sections = [section(Id, maps:get(Name, Parts))
                 || {Name, Id} <- Order, is_map_key(Name, Parts)],
     iolist_to_binary([<<0, "asm", 1, 0, 0, 0>> | Sections]).
