@@ -6,17 +6,13 @@ The idea comes from George Xenos and Sotiris Giannopoulos’s experiment in writ
 
 ## What would an application do with these bytes?
 
-Imagine an HTTP client fetching a page. The server replies with status 429 (“Too Many Requests”). Should the client try again later? We asked the model to put one small piece of that decision into a function called `retry`. Under the rule in the prompt, 429 and every status from 500 through 599 mean “retry”. Every other integer means “stop”.
+Imagine a weather app asking a server for today’s forecast. If the server replies `429 Too Many Requests`, it makes sense to try again later. If it replies `404 Not Found`, asking for the same page again is unlikely to help. How does the app decide?
 
-The HTTP client is the **host**. It loads the Wasm module and calls `retry` by name. Wasm calls a function exposed this way an **export**. The host passes in one 32-bit integer and gets one back. It interprets the result and handles the network request and its timing itself.
+We gave the model a simple rule for this app. Try again after a 429 or any status from 500 through 599. Stop for every other status. We asked it to write a complete Wasm module with one function, `retry`, that makes that decision. [Read the prompt](prompts/write.txt)
 
-| What the client received | Call into Wasm | What the client learns |
-| --- | --- | --- |
-| 429 Too Many Requests | `retry(429)` → `1` | Schedule another attempt. |
-| 503 Service Unavailable | `retry(503)` → `1` | Schedule another attempt. |
-| 404 Not Found | `retry(404)` → `0` | Stop retrying this request. |
+The app loads the module once. When a response arrives, it passes the status code to `retry`. Calling `retry(429)` returns `1`, so the app schedules another attempt. Calling `retry(404)` returns `0`, so it stops. The app handles the network request and decides how long to wait.
 
-We then asked the model to change the policy while keeping the same function name and argument. With the revised module, the client’s existing call `retry(408)` changes from 0 to 1, and `retry(501)` changes from 1 to 0. The other 526 tested answers stay the same. [Revision prompt](trials/revise/claude-sonnet-5-5-1/prompt.txt) · [Revised reply](trials/revise/claude-sonnet-5-5-1/reply.txt)
+In Wasm terminology, the app is the **host**, and `retry` is an **export**, a function the host can call by name.
 
 ## From the model’s reply to a function call
 
@@ -30,7 +26,7 @@ Here is Sonnet’s entire answer to the first prompt. Each pair of hexadecimal d
 0a 15 01 13 00 20 00 41 ad 03 46 20 00 41 f4 03 6b 41 e4 00 49 72 0b
 ```
 
-The first eight bytes identify the file as a Wasm module and give its format version. The fourth line contains the name `retry` (`72 65 74 72 79`), and the last line contains the function body. To make the same call as the client above, run these commands from the repository root with `xxd` and Wasmtime installed.
+The first eight bytes identify the file as a Wasm module and give its format version. The fourth line contains the name `retry` (`72 65 74 72 79`), and the last line contains the function body. To try the weather app’s two calls yourself, run these commands from the repository root with `xxd` and Wasmtime installed.
 
 ```sh
 xxd -r -p trials/write/claude-sonnet-5-5-1/reply.txt > retry.wasm
@@ -39,6 +35,8 @@ wasmtime run -W fuel=10000 --invoke retry retry.wasm 404
 ```
 
 The calls print `1` and `0`. The first command simply converts the model’s text to bytes. The next two load those bytes and call the exported function. [Call the same file from Node.js](doc/runner.md#call-the-module-from-nodejs)
+
+Now suppose the app should also retry after a timeout (`408`) and stop when the server says a feature is unimplemented (`501`). We gave Sonnet its original bytes and asked for those two changes. The app can load the revised module and keep calling `retry(status)` exactly as before. In the recorded run, `retry(408)` changed from 0 to 1, `retry(501)` changed from 1 to 0, and the other 526 tested answers stayed the same. [Revision prompt](trials/revise/claude-sonnet-5-5-1/prompt.txt) · [Revised reply](trials/revise/claude-sonnet-5-5-1/reply.txt)
 
 ## How can you check a model’s answer before using it?
 
