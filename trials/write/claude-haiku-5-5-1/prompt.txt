@@ -1,0 +1,25 @@
+Write a complete WebAssembly module in the binary format (the bytes of a
+.wasm file, version 1) and reply with its bytes as hex.
+
+The module exports one function, named "retry", with one i32 parameter and
+one i32 result:
+
+  retry(x) returns 1 when x is 429,
+  returns 1 when x is from 500 through 599 inclusive,
+  and returns 0 for every other i32 value, including negative values.
+
+The module has exactly one function, the exported one, and exports nothing
+else. It has no imports, no memory and no start function.
+
+You write every byte: the magic number and version, every section id, every
+section length, every function body length and every instruction. Nothing
+will be added to your bytes and no length will be corrected: the bytes you
+send are the bytes that run.
+
+Reply with only the bytes, as pairs of hexadecimal digits, for example:
+
+0f a0 7c
+
+Whitespace and line breaks between pairs are allowed. Do not split a pair.
+Do not add anything else: no explanation, no code fence, no 0x prefix, no
+comments.

@@ -1,0 +1,31 @@
+Below is a complete WebAssembly module in the binary format, as hex. It
+exports one function, named "retry", with one i32 parameter and one i32
+result.
+
+00 61 73 6d 01 00 00 00 01 06 01 60 01 7f 01 7f
+03 02 01 00 07 09 01 05 72 65 74 72 79 00 00 0a
+15 01 13 00 20 00 41 ad 03 46 20 00 41 f4 03 6b
+41 e4 00 49 72 0b
+
+Change the module so that retry(x):
+
+  also returns 1 when x is 408,
+  returns 0 when x is 501,
+
+and returns exactly what it returns now for every other i32 value.
+
+Keep the module's shape: exactly one function, the exported one, nothing
+else exported, no imports, no memory and no start function.
+
+Reply with the complete revised module. You write every byte: the magic
+number and version, every section id, every section length, every function
+body length and every instruction. Nothing will be added to your bytes and
+no length will be corrected: the bytes you send are the bytes that run.
+
+Reply with only the bytes, as pairs of hexadecimal digits, for example:
+
+0f a0 7c
+
+Whitespace and line breaks between pairs are allowed. Do not split a pair.
+Do not add anything else: no explanation, no code fence, no 0x prefix, no
+comments.

@@ -1,0 +1,16 @@
+#!/bin/sh
+# Runs the wasm-bytes runner. Compiles first; the first run fetches
+# erlang_wasm from Hex, at the version pinned in rebar.lock.
+set -e
+ROOT=$(cd "$(dirname "$0")/.." && pwd)
+if [ ! -d "$ROOT/_build/default/lib/wasm" ]; then
+    echo "wasm-bytes: first run, fetching and compiling erlang_wasm" >&2
+fi
+if ! out=$(cd "$ROOT" && rebar3 compile 2>&1); then
+    echo "$out" >&2
+    exit 2
+fi
+WASM_BYTES_ROOT="$ROOT" exec erl -noshell \
+    -pa "$ROOT"/_build/default/lib/*/ebin \
+    -eval 'wasm_bytes:main(init:get_plain_arguments())' \
+    -extra "$@"
