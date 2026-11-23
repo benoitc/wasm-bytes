@@ -15,7 +15,8 @@ For results across models and the limits of these samples, see the [project stat
 
 1. Choose a new label for the attempt and create `trials/write/<label>/`. Save the output of `bin/wasm-bytes prompt write` there as `prompt.txt`. Send that text to the model.
 2. Save the complete reply as `reply.txt` in the same directory. Run `bin/wasm-bytes check write trials/write/<label>/reply.txt`, substituting your label.
-3. Add `fixture.config`. Fill in the model version, interface and settings, date, and the verdict that `check` printed. A failed attempt is worth recording too.
+3. If `check` printed a byte count on its `hex` line, record the hash of the decoded module, so that every engine and host can be checked against the same bytes. Run `xxd -r -p reply.txt > module.wasm && shasum -a 256 module.wasm > module.sha256` in the trial directory, then delete `module.wasm`. A test checks that the hash matches the reply.
+4. Add `fixture.config`. Fill in the model version, interface and settings, date, and the verdict that `check` printed. A failed attempt is worth recording too.
 
 ```erlang
 {source, model_trial}.
@@ -38,4 +39,4 @@ scripts/record-claude-trial.sh write my-label claude-sonnet-5-5
 scripts/record-claude-trial.sh revise my-label claude-sonnet-5-5 write/my-label
 ```
 
-The recorder also saves `response.json` with the model identity, turn count, and token usage reported by the CLI. It runs in an empty directory with tools, MCP servers, and settings disabled and a replacement system prompt. Claude Code still supplies some environment and account context. [Recording script](../scripts/record-claude-trial.sh)
+The recorder also saves `response.json` with the model identity, turn count, and token usage reported by the CLI. It saves `module.sha256` too, the hash of the module the reply decodes to, in `shasum -a 256` format. It runs in an empty directory with tools, MCP servers, and settings disabled and a replacement system prompt. Claude Code still supplies some environment and account context. [Recording script](../scripts/record-claude-trial.sh)

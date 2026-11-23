@@ -14,10 +14,22 @@ Opus and Sonnet each returned a working 54-byte module. Haiku also produced a mo
 
 Each result describes one attempt on one small function. The checker covers every HTTP status from 100 through 599 and 28 additional integers, including negative values and the limits of a 32-bit integer. A pass means the module met the interface requirements and produced the expected answer on those inputs. [How the checker works](runner.md)
 
-All five trials used Claude Code with tools disabled, default sampling, and a replacement system prompt. The CLI still supplied some environment and account context. The same Opus model had also produced the passing write example while the checker was being built. Its recorded write reply matches that example byte for byte. The twelve examples under `examples/` were prepared to demonstrate checker behavior. The table counts only the five attempts with a recorded prompt, raw reply, and model identity. [Trial records](../trials/) · [Passing example](../examples/write/accepted/reply.txt)
+All five trials used Claude Code with tools disabled, default sampling, and a replacement system prompt. The CLI still supplied some environment and account context. The same Opus model had also produced the passing write example while the checker was being built. The recorded Opus and Sonnet write replies both decode to exactly the bytes of that example, so all three share one SHA-256. Both trials ran without tools, so neither copied the example. The match does mean the example is not independent of the Opus trial. The twelve examples under `examples/` were prepared to demonstrate checker behavior. The table counts only the five attempts with a recorded prompt, raw reply, and model identity. [Trial records](../trials/) · [Passing example](../examples/write/accepted/reply.txt)
+
+## Cross-engine and platform runs
+
+On 23 November 2026, the Sonnet write module ran in erlang_wasm 0.11.0 and in Wasmtime 50.0.1 on all 528 inputs. Both engines gave the reference answer every time and reported the same SHA-256 for the bytes they received. This held on three host configurations, all on one Apple silicon Mac:
+
+| Host | erlang_wasm | Wasmtime |
+| --- | --- | --- |
+| macOS 27.2, arm64 | 528 of 528 | 528 of 528 |
+| Debian 13 in a container, aarch64 | 528 of 528 | 528 of 528 |
+| Debian 13 in a container, x86_64 emulated | 528 of 528 | 528 of 528 |
+
+These runs establish that two engines agree on this module on one host, and that the result held on a second operating system and with the x86_64 builds of both engines. A run on separate x86_64 hardware has not been recorded yet. [Commands, records, and limits](evidence.md)
 
 ## Replay or extend the experiment
 
-Run `bin/wasm-bytes demo` from the repository root to replay the examples and trials. To try another model, send it the same write prompt and keep its reply intact. [First-run instructions](../README.md) · [How to record a trial](../trials/README.md)
+Run `bin/wasm-bytes replay` from the repository root for the short account, or `bin/wasm-bytes demo` to replay every example and trial. To try another model, send it the same write prompt and keep its reply intact. [First-run instructions](../README.md) · [How to record a trial](../trials/README.md)
 
 The current tasks both ask for the complete module in hexadecimal. Planned comparisons include larger tasks, repeated attempts across providers, and asking for just the function body or for WebAssembly’s text format (WAT). The repository currently has no license file.

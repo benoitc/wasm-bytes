@@ -1,6 +1,9 @@
 %% The command line: `bin/wasm-bytes <command>'.
 %%
+%%   replay                             trace one model reply and five outcomes
 %%   demo                               replay every saved reply
+%%   trace TRIAL [--wasm FILE]          prompt, reply and decoded module of a trial
+%%   compare TASK REPLY [--record DIR]  run a reply in erlang_wasm and Wasmtime
 %%   check write REPLY                  check a task 1 reply
 %%   check revise REPLY --base REPLY    check a task 2 reply against its base
 %%   prompt write                       print the task 1 prompt
@@ -27,8 +30,23 @@ main(Args) ->
            end,
     erlang:halt(Code).
 
+command(["replay"]) ->
+    {Out, Ok} = wb_replay:run(root()),
+    io:put_chars(Out),
+    case Ok of
+        true -> 0;
+        false -> 1
+    end;
 command(["demo"]) ->
     demo(root());
+command(["trace", Dir]) ->
+    trace(Dir, undefined);
+command(["trace", Dir, "--wasm", File]) ->
+    trace(Dir, File);
+command(["compare", Task, Reply]) ->
+    compare(task(Task), Reply, undefined);
+command(["compare", Task, Reply, "--record", Dir]) ->
+    compare(task(Task), Reply, Dir);
 command(["check", "write", Reply]) ->
     R = wb_check:check(write, input(Reply)),
     io:put_chars(wb_report:report(R)),
@@ -56,7 +74,10 @@ command(_) ->
     throw({usage, "wasm-bytes: unknown command"}).
 
 usage() ->
-    "usage: bin/wasm-bytes demo\n"
+    "usage: bin/wasm-bytes replay\n"
+    "       bin/wasm-bytes demo\n"
+    "       bin/wasm-bytes trace TRIAL-DIRECTORY [--wasm FILE]\n"
+    "       bin/wasm-bytes compare write|revise REPLY [--record DIRECTORY]\n"
     "       bin/wasm-bytes check write REPLY\n"
     "       bin/wasm-bytes check revise REPLY --base REPLY\n"
     "       bin/wasm-bytes prompt write\n"
@@ -72,6 +93,58 @@ check_revise(Reply, Base) ->
             io:put_chars(wb_report:base_refused(list_to_binary(Base), Report)),
             1
     end.
+
+trace(Dir, Wasm) ->
+    case wb_trace:load(Dir) of
+        {ok, T} ->
+            io:put_chars(wb_trace:trace(T)),
+            case {Wasm, T} of
+                {undefined, _} ->
+                    0;
+                {_, #{decoded := {ok, Bytes}}} ->
+                    ok = file:write_file(Wasm, Bytes),
+                    io:format("  wrote      ~ts~n", [Wasm]),
+                    0;
+                {_, _} ->
+                    1
+            end;
+        {error, {Path, Why}} ->
+            throw({fail, io_lib:format("cannot read ~ts: ~ts", [Path, file:format_error(Why)])})
+    end.
+
+%% Exits 0 when both engines match the reference on every input, 1 when they
+%% do not, 2 when Wasmtime is missing or the reply is not hex.
+compare(Task, Reply, RecordDir) ->
+    case wb_compare:compare(Task, input(Reply), relative(Reply)) of
+        {ok, C} ->
+            io:put_chars(wb_compare:report(C)),
+            case RecordDir of
+                undefined -> ok;
+                _ -> io:format("  ~-12s ~ts~n", ["recorded", wb_compare:record(C, RecordDir)])
+            end,
+            case maps:get(verdict, C) of
+                pass -> 0;
+                _ -> 1
+            end;
+        {error, wasmtime_not_found} ->
+            throw({fail, "wasmtime not found: install it (https://wasmtime.dev) or set WASMTIME "
+                         "to its path. Nothing else in wasm-bytes needs it."});
+        {error, {malformed_hex, Why}} ->
+            throw({fail, io_lib:format("the reply is not hex: ~0p", [Why])})
+    end.
+
+task("write") -> write;
+task("revise") -> revise;
+task(_) -> throw({usage, "wasm-bytes: the task is write or revise"}).
+
+%% A reply's path as the repository names it, when it is inside it.
+relative(Path) ->
+    Abs = filename:absname(Path),
+    Root = filename:absname(root()) ++ "/",
+    unicode:characters_to_binary(case lists:prefix(Root, Abs) of
+                                     true -> lists:nthtail(length(Root), Abs);
+                                     false -> Path
+                                 end).
 
 %% 0 the reply passes, 1 it does not, 2 the runner could not judge it.
 exit_code(#{verdict := pass}) -> 0;

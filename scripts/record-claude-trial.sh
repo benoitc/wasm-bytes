@@ -59,6 +59,12 @@ erl -noshell -eval '
     halt().' -extra "$EMPTY/out.json" "$DIR" > "$EMPTY/model"
 rm -f "$EMPTY/out.json"
 
+# The hash of the module the reply decodes to, as shasum writes it, so any
+# engine or platform can be checked against the exact bytes.
+if "$ROOT/bin/wasm-bytes" trace "$DIR" --wasm "$EMPTY/module.wasm" >/dev/null 2>&1; then
+    (cd "$EMPTY" && shasum -a 256 module.wasm) > "$DIR/module.sha256"
+fi
+
 if [ "$TASK" = write ]; then
     OUT=$("$ROOT/bin/wasm-bytes" check write "$DIR/reply.txt" || true)
 else
