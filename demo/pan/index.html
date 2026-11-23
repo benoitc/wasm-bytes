@@ -18,6 +18,7 @@
          font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
   main { max-width: 760px; margin: 0 auto; padding: 24px 16px 48px; }
   h1 { font-size: 1.4rem; margin: 0 0 4px; }
+  a { color: var(--accent); }
   p { margin: 8px 0; }
   .muted { color: var(--muted); font-size: 0.92rem; }
   .controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 20px 0 12px; }
@@ -48,10 +49,11 @@
 </head>
 <body>
 <main>
-  <h1>DX-Ball sound pan, written as WebAssembly bytes</h1>
-  <p class="muted">A ball crosses the screen. Each beep is panned by <code>screen_pan(x)</code>, the
-  position-to-pan helper that REA recovered from DX-Ball's x86 code, here implemented by a model
-  as raw WebAssembly bytes. Switch modules to hear the same motion with the stereo reversed.</p>
+  <p class="muted"><a href="https://github.com/benoitc/wasm-bytes/blob/main/doc/dx-ball.md">How this was made and checked</a></p>
+  <h1>Hear the sound follow the ball</h1>
+  <p>Turn <strong>Sound</strong> on and watch the ball cross the screen.
+  Listen once in <strong>Original</strong>, then select <strong>Reversed</strong>.
+  The ball still moves right. Which way does the beep go?</p>
 
   <div class="controls">
     <button id="sound" aria-pressed="false">Sound: off</button>
@@ -70,24 +72,24 @@
   <div class="meter" aria-hidden="true"><div class="mark" id="mark"></div></div>
   <div class="meter-labels"><span>left</span><span>stereo position sent to the speakers</span><span>right</span></div>
 
-  <table>
-    <thead><tr><th>Module</th><th>Written by</th><th>SHA-256 of the bytes this page runs</th></tr></thead>
-    <tbody id="modules"></tbody>
-  </table>
-
-  <h2>Where each part comes from</h2>
-  <p><strong>REA</strong> recovered the behaviour: the 63-byte function at <code>0x406400</code> in
-  <code>DXBALL.EXE</code> 1.07 computes <code>(x &times; 1.5625 &minus; 500.0) &times; scale</code> with
-  the scale stored as 1.0, then truncates toward zero. The game passes it a screen position and gives
-  the result to its sound routine.</p>
-  <p><strong>The model</strong> wrote both modules, every byte, from an English description of that
-  behaviour and, for the reversed one, its own accepted bytes and a change request. The runner checked
-  each one on every position from 0 through 640 before this page was built.</p>
-  <p><strong>This page</strong> is the host. It moves the ball, calls <code>screen_pan(x)</code> on the
-  selected module, and plays the same beep at the same volume and times in both modes. It maps the
-  returned value to the speakers as value &divide; 500, so &minus;500 is fully left and 500 fully right.
-  That mapping is the host's choice: the game's own sound code has not been reconstructed, so how loud
-  DX-Ball made each side is not known.</p>
+  <h2>What changed?</h2>
+  <p>In <strong>Original</strong>, the beep follows the ball. In <strong>Reversed</strong>,
+  it travels the other way. If your sound is off, follow the marker below the ball.
+  Both versions put the beep in the middle when the ball reaches the center.</p>
+  <p>REA worked out how the game DX-Ball turned a position into a number for its sound system.
+  We described that rule to a language model and asked it to write a program the browser could run.
+  Then we gave it its program back and asked it to reverse the sound.</p>
+  <p>The browser draws the ball and plays the beep. Each program decides where the beep should come from. At the right edge, the original returns 500 and the
+  revision returns −500. The browser sends those values to opposite speakers.</p>
+  <details>
+    <summary>Which recorded programs am I hearing?</summary>
+    <p>Each row identifies the model and its saved reply. The fingerprint (SHA-256)
+    lets you check that the browser loaded the recorded bytes.</p>
+    <table>
+      <thead><tr><th>Version</th><th>Model and reply</th><th>File fingerprint</th></tr></thead>
+      <tbody id="modules"></tbody>
+    </table>
+  </details>
 </main>
 <script src="modules.js"></script>
 <script src="app.js"></script>
