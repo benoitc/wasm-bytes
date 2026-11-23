@@ -70,31 +70,15 @@ bin/wasm-bytes check digits trials/digits/claude-haiku-5-5-1/reply.txt
 
 ## Hear a function recovered from a game
 
-REA recovered a small function from the x86 code of DX-Ball, a 1996 game. It turns a horizontal screen position into a stereo pan value for the game's sounds. `screen_pan(0)` returns −500 at the left edge, `screen_pan(320)` returns 0, and `screen_pan(640)` returns 500. We described that recovered behavior to three models and asked each one for the Wasm bytes. Then we gave each model its own accepted bytes and asked it to reverse the stereo. All six replies passed on every position from 0 through 640, in erlang_wasm and in Wasmtime. [Prompt](prompts/pan.txt) · [What REA recovered and what was checked](doc/dx-ball.md)
+In DX-Ball, a brick hit has a position on screen and a sound. We asked Claude to write the small program that turns that position into a stereo setting. Then we asked it to make the sound travel the other way. Sonnet changed one byte.
 
-![Animated replay of the DX-Ball trial. Sonnet writes 76 Wasm bytes from the prompt. As the ball moves right, the stereo pan follows. A second prompt changes one byte, and the same calls now pan left.](doc/media/dx-ball-pan-replay.gif)
+![The ball moves right in both versions. The sound follows it in Original mode and travels left in Reversed mode.](doc/media/dx-ball-pan-replay.gif)
 
-Watch the two markers on the second sweep. The ball still moves to the right, but the sound moves left. The number above them is the value returned by `screen_pan(x)`. To hear the difference, run the demo below. [Original reply](trials/pan/claude-sonnet-5-5-1/reply.txt) · [Revision prompt](trials/reverse/claude-sonnet-5-5-1/prompt.txt) · [Revised reply](trials/reverse/claude-sonnet-5-5-1/reply.txt)
-
-To replay the checks of Sonnet's pair, run the command below. It checks the original module again, then the reversed one against it:
-
-```sh
-bin/wasm-bytes check reverse trials/reverse/claude-sonnet-5-5-1/reply.txt --base trials/pan/claude-sonnet-5-5-1/reply.txt
-```
-
-```text
-  base     trials/pan/claude-sonnet-5-5-1/reply.txt: 76 bytes, passes the pan task
-  request  done: all 640 requested changes; no other result changed
-  verdict  pass
-```
-
-To listen, build and open the demo page:
+To hear it, run the command below, turn **Sound** on, and switch from **Original** to **Reversed**. The ball follows the same path on both passes. [Walk through the demo](doc/dx-ball.md#hear-it) · [Read the exact prompt](trials/pan/claude-sonnet-5-5-1/prompt.txt)
 
 ```sh
 bin/wasm-bytes pan-demo
 ```
-
-A ball crosses the screen and beeps. Turn the sound on, then switch from Original to Reversed. The same motion now sounds from right to left. REA supplied the behavior and the model wrote every byte of both modules. The page is the host: it moves the ball, calls `screen_pan(x)` on the selected module, and maps the returned value to the speakers. Only the module changes between modes. The page shows x and the returned value beside the ball, so you can follow along with the sound muted. The game's executable was not available, so the replies were checked against REA's recorded instructions rather than against the game itself. [Demo and evidence](doc/dx-ball.md#hear-it)
 
 ## Try your own model
 
