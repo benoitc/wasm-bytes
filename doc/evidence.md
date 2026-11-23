@@ -1,6 +1,6 @@
 # Evidence for the three claims
 
-This page records what was run to support three claims about one recorded reply. Each section gives the command that repeats a run and the files that preserve it. Read it to check a claim yourself, or to see what was verified and on which hosts. The claims cover one function, `retry`, and the five attempts recorded under `trials/`. The runs below were recorded on 23 November 2026. [Project status](status.md) · [How a check works](runner.md)
+This page records what was run to support three claims about one recorded reply. Each section gives the command that repeats a run and the files that preserve it. Read it to check a claim yourself, or to see what was verified and on which hosts. The claims are traced through one function, `retry`, and its recorded attempts under `trials/`. The `digit_sum` trials have run records too. The runs below were recorded on 23 November 2026. [Project status](status.md) · [How a check works](runner.md)
 
 1. A language model supplied the executable bytes directly.
 2. erlang_wasm validates and runs those bytes under explicit limits.
@@ -109,11 +109,11 @@ The same command ran on three host configurations. Each run wrote a record with 
 
 | Host | How it ran | erlang_wasm | Wasmtime | Module SHA-256 | Result | Record |
 | --- | --- | --- | --- | --- | --- | --- |
-| macOS 27.2, arm64 | directly on an Apple silicon Mac | 0.11.0, OTP 29.1.2: 528 of 528 | 50.0.1: 528 of 528 | `5085ed49…dee7` | `pass` | [darwin-arm64](../evidence/runs/darwin-arm64.config) |
-| Debian 13, aarch64 | Linux container on the same Mac, native CPU | 0.11.0, OTP 29.1.2: 528 of 528 | 50.0.1: 528 of 528 | `5085ed49…dee7` | `pass` | [linux-aarch64](../evidence/runs/linux-aarch64.config) |
-| Debian 13, x86_64 | Linux container on the same Mac, x86_64 emulated by OrbStack | 0.11.0, OTP 29.1.2: 528 of 528 | 50.0.1: 528 of 528 | `5085ed49…dee7` | `pass` | [linux-x86_64](../evidence/runs/linux-x86_64.config) |
+| macOS 27.2, arm64 | directly on an Apple silicon Mac | 0.11.0, OTP 29.1.2: 528 of 528 | 50.0.1: 528 of 528 | `5085ed49…dee7` | `pass` | [darwin-arm64](../evidence/runs/write-claude-sonnet-5-5-1/darwin-arm64.config) |
+| Debian 13, aarch64 | Linux container on the same Mac, native CPU | 0.11.0, OTP 29.1.2: 528 of 528 | 50.0.1: 528 of 528 | `5085ed49…dee7` | `pass` | [linux-aarch64](../evidence/runs/write-claude-sonnet-5-5-1/linux-aarch64.config) |
+| Debian 13, x86_64 | Linux container on the same Mac, x86_64 emulated by OrbStack | 0.11.0, OTP 29.1.2: 528 of 528 | 50.0.1: 528 of 528 | `5085ed49…dee7` | `pass` | [linux-x86_64](../evidence/runs/write-claude-sonnet-5-5-1/linux-x86_64.config) |
 
-To repeat the Linux runs, use Docker. The script builds an image with Erlang/OTP 29 and the Wasmtime release, copies the repository into the container, and writes the record to `evidence/runs/`.
+To repeat the Linux runs, use Docker. The script builds an image with Erlang/OTP 29 and the Wasmtime release, and copies the repository into the container. It writes the record to `evidence/runs/<task>-<label>/`. Set `TASK` and `REPLY` to run another trial, for example `TASK=digits REPLY=trials/digits/claude-haiku-5-5-1/reply.txt`.
 
 ```sh
 scripts/platform-check.sh linux/arm64
@@ -122,10 +122,12 @@ scripts/platform-check.sh linux/amd64
 
 On an arm64 host, the `linux/amd64` run is emulated. Under emulation the Erlang VM does not boot with its default JIT memory mapping, so the script starts it with `+JMsingle true`. The flag changes how the VM maps its own code. It does not change how either engine runs the module. The record notes the flag. [Platform script](../scripts/platform-check.sh)
 
+The three `digit_sum` trials ran the same way, with `compare digits`, on the same three host configurations. All nine runs passed on 1,353 of 1,353 inputs. [Records](../evidence/runs/)
+
 **What these runs establish.** On one Mac, erlang_wasm and Wasmtime gave the reference answer on all 528 inputs for the same 54 bytes. The same held on a second operating system, Linux, and with the x86_64 builds of both engines. The two engines also agree on the constructed failures, for example at input 599 and on fuel exhaustion. Run `compare` on any reply under `examples/` to see the first discrepancy.
 
 **What remains pending.** All three runs used one physical machine. Linux ran in a virtual machine on it, and x86_64 was emulated. A run on separate x86_64 hardware has not been recorded. Neither has a run on Windows. On such a host, run `scripts/platform-check.sh linux/amd64` without emulation, or run `bin/wasm-bytes compare` directly with `--record evidence/runs`.
 
 ## The scope of these claims
 
-These results cover one 54-byte function, the 528 inputs in [the task definition](../src/wb_task.erl), and the five recorded attempts. Opus and Sonnet passed both tasks on their single recorded attempts. Haiku's write attempt was valid but wrong on 526 inputs. The results say nothing about how often a model succeeds, about other models, or about larger programs. [Trial results](status.md)
+These results cover two small functions, `retry` in 54 bytes and `digit_sum` in 90 to 95 bytes, and the inputs in [the task definitions](../src/wb_task.erl). They also cover the recorded attempts, one per model, task, and prompt. Opus and Sonnet passed every task on their single attempts. Haiku's baseline `retry` attempt was valid but wrong on 526 inputs. A local model passed only the guided `digit_sum` task. [All attempts](status.md) The results say nothing about how often a model succeeds, about models not tried here, or about larger programs. [Trial results](status.md)

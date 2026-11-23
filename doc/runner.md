@@ -9,7 +9,7 @@
 | `malformed_hex` | The text could not be read as hex byte pairs. | Look for an empty reply, an unpaired digit, prose, or a code fence. For an offending character the report gives its line and column. |
 | `malformed_wasm` | The bytes could not be decoded as a WebAssembly module. | Read the decoder message. A truncated section can declare more bytes than are present. |
 | `invalid` | The module decodes but breaks a WebAssembly validation rule. | The validation message can identify an instruction type or stack mismatch. |
-| `interface_mismatch` | The module validates but has the wrong shape for this task. | Read `profile`. The module must contain exactly one function, export it as `retry` with one 32-bit integer argument and result, and have no other exports, imports, memory, or start function. |
+| `interface_mismatch` | The module validates but has the wrong shape for this task. | Read `profile`. The module must contain exactly one function, export it under the task's name (`retry` or `digit_sum`) with one 32-bit integer argument and result, and have no other exports, imports, memory, or start function. |
 | `execution_failure` | The module could not start, or a call failed to return a result. | Read `failed` for a trap, fuel exhaustion, deadline, or instantiation error. |
 | `wrong_answer` | The function ran and at least one answer differed from the reference. | Read `wrong` for the inputs, expected values, and actual results. |
 | `runner_error` | The checker or its WebAssembly runtime encountered an internal error. | Keep the diagnostic when reporting the problem. The reply has no score. |
@@ -38,7 +38,7 @@ bin/wasm-bytes compare write trials/write/claude-sonnet-5-5-1/reply.txt
 
 ## What a pass covers
 
-The checker calls `retry` on every status from 100 through 599, plus 28 other integers. These include negative numbers, 32-bit boundaries, and numbers whose low bits match a status of interest. Each answer is compared with a reference function written in Erlang from the task description. [Test inputs and reference functions](../src/wb_task.erl)
+For `retry`, the checker calls the function on every status from 100 through 599, plus 28 other integers. These include negative numbers, 32-bit boundaries, and numbers whose low bits match a status of interest. For `digit_sum`, it makes 1,353 calls. They cover 0 through 1000, −1 through −100, powers of ten and their neighbours, the 32-bit limits, and 200 numbers spread over the whole range. Each answer is compared with a reference function written in Erlang from the task description. [Test inputs and reference functions](../src/wb_task.erl)
 
 The checker verifies the module's interface before running it. Each call starts with fresh instance state and has a budget of 10,000 fuel units and a 1,000 ms deadline. The checker replaces a worker that hits its deadline. After three deadlines it marks the remaining inputs as untested. [Interface checks](../src/wb_profile.erl) · [Execution limits](../src/wb_exec.erl)
 

@@ -4,9 +4,9 @@
 %%   demo                               replay every saved reply
 %%   trace TRIAL [--wasm FILE]          prompt, reply and decoded module of a trial
 %%   compare TASK REPLY [--record DIR]  run a reply in erlang_wasm and Wasmtime
-%%   check write REPLY                  check a task 1 reply
+%%   check write|digits REPLY           check a reply to a one-prompt task
 %%   check revise REPLY --base REPLY    check a task 2 reply against its base
-%%   prompt write                       print the task 1 prompt
+%%   prompt write|digits [--guided]     print a one-prompt task's prompt
 %%   prompt revise --base REPLY         print the task 2 prompt for a base
 %%
 %% REPLY is a file, or `-' for standard input.
@@ -47,16 +47,21 @@ command(["compare", Task, Reply]) ->
     compare(task(Task), Reply, undefined);
 command(["compare", Task, Reply, "--record", Dir]) ->
     compare(task(Task), Reply, Dir);
-command(["check", "write", Reply]) ->
-    R = wb_check:check(write, input(Reply)),
+command(["check", Task, Reply]) when Task =:= "write"; Task =:= "digits" ->
+    R = wb_check:check(task(Task), input(Reply)),
     io:put_chars(wb_report:report(R)),
     exit_code(R);
 command(["check", "revise", Reply, "--base", Base]) ->
     check_revise(Reply, Base);
 command(["check", "revise", "--base", Base, Reply]) ->
     check_revise(Reply, Base);
-command(["prompt", "write"]) ->
-    io:put_chars(prompt_file(root(), write)),
+command(["prompt", Task]) when Task =:= "write"; Task =:= "digits" ->
+    io:put_chars(prompt_file(root(), task(Task))),
+    0;
+command(["prompt", Task, "--guided"]) when Task =:= "write"; Task =:= "digits" ->
+    {ok, Path} = wb_task:prompt(task(Task), guided),
+    {ok, Bin} = file:read_file(filename:join(root(), Path)),
+    io:put_chars(Bin),
     0;
 command(["prompt", "revise", "--base", Base]) ->
     case render_revise_prompt(root(), input(Base)) of
@@ -77,10 +82,10 @@ usage() ->
     "usage: bin/wasm-bytes replay\n"
     "       bin/wasm-bytes demo\n"
     "       bin/wasm-bytes trace TRIAL-DIRECTORY [--wasm FILE]\n"
-    "       bin/wasm-bytes compare write|revise REPLY [--record DIRECTORY]\n"
-    "       bin/wasm-bytes check write REPLY\n"
+    "       bin/wasm-bytes compare write|revise|digits REPLY [--record DIRECTORY]\n"
+    "       bin/wasm-bytes check write|digits REPLY\n"
     "       bin/wasm-bytes check revise REPLY --base REPLY\n"
-    "       bin/wasm-bytes prompt write\n"
+    "       bin/wasm-bytes prompt write|digits [--guided]\n"
     "       bin/wasm-bytes prompt revise --base REPLY\n"
     "REPLY is a file holding a model's reply, or - for standard input.\n".
 
@@ -135,7 +140,8 @@ compare(Task, Reply, RecordDir) ->
 
 task("write") -> write;
 task("revise") -> revise;
-task(_) -> throw({usage, "wasm-bytes: the task is write or revise"}).
+task("digits") -> digits;
+task(_) -> throw({usage, "wasm-bytes: the task is write, revise or digits"}).
 
 %% A reply's path as the repository names it, when it is inside it.
 relative(Path) ->
@@ -200,9 +206,10 @@ root() ->
 demo(Root) ->
     Fixtures = wb_fixture:all(Root),
     #{fuel := Fuel, deadline_ms := Deadline, max_module_bytes := MaxBytes} = wb_check:limits(),
-    io:format("wasm-bytes demo: erlang_wasm ~ts, ~b inputs per candidate, "
-              "fuel ~b, deadline ~b ms, at most ~b module bytes~n~n",
-              [vsn(), length(wb_task:inputs()), Fuel, Deadline, MaxBytes]),
+    io:format("wasm-bytes demo: erlang_wasm ~ts, ~b inputs per retry candidate and ~b per "
+              "digit_sum candidate, fuel ~b, deadline ~b ms, at most ~b module bytes~n~n",
+              [vsn(), length(wb_task:inputs(write)), length(wb_task:inputs(digits)),
+               Fuel, Deadline, MaxBytes]),
     Rows = [replay(Root, F) || F <- Fixtures],
     io:put_chars(summary(Rows)),
     case lists:all(fun(#{ok := Ok}) -> Ok end, Rows) of
@@ -220,8 +227,8 @@ replay(Root, #{task := Task, label := Label, kind := Kind, config := C} = F) ->
     Got = case {Problems, Task} of
               {[_ | _], _} ->
                   undefined;
-              {[], write} ->
-                  R = wb_check:check(write, maps:get(reply, F)),
+              {[], _} when Task =/= revise ->
+                  R = wb_check:check(Task, maps:get(reply, F)),
                   io:put_chars(wb_report:report(R)),
                   maps:get(verdict, R);
               {[], revise} ->
@@ -270,8 +277,8 @@ summary(Rows) ->
     Trials = length([R || #{trial := true} = R <- Rows]),
     Matched = length([R || #{ok := true} = R <- Rows]),
     ["Summary\n",
-     io_lib:format("  ~-34s ~-14s ~-20s ~-20s~n", ["fixture", "source", "labelled", "got"]),
-     [io_lib:format("  ~-34ts ~-14s ~-20s ~-20s ~s~n",
+     io_lib:format("  ~-44s ~-14s ~-20s ~-20s~n", ["fixture", "source", "labelled", "got"]),
+     [io_lib:format("  ~-44ts ~-14s ~-20s ~-20s ~s~n",
                     [Name, source(S), atom(E), atom(G), case Ok of true -> "ok"; false -> "MISMATCH" end])
       || #{name := Name, source := S, expect := E, got := G, ok := Ok} <- Rows],
      io_lib:format("~n  ~b of ~b fixtures as labelled.~n", [Matched, length(Rows)]),

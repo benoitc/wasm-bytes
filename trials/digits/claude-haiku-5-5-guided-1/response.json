@@ -1,0 +1,17 @@
+{
+  "claude_code_version": "2.1.330",
+  "is_error": false,
+  "mcp_servers": [],
+  "model": "claude-haiku-5-5",
+  "num_turns": 1,
+  "result": "00 61 73 6d 01 00 00 00\n01 06 01 60 01 7f 01 7f\n03 02 01 00\n07 0d 01 09 64 69 67 69 74 5f 73 75 6d 00 00\n0a 35 01 33\n01 02 7f 41 00 20 00 6b 20 00 20 00 41 00 48 1b 21 01 02 40 03 40 20 01 45 0d 01 20 02 20 01 41 0a 70 6a 21 02 20 01 41 0a 6e 21 01 0c 00 0b 0b 20 02 0b",
+  "tools": [],
+  "usage": {
+    "cache_creation_input_tokens": 2754,
+    "cache_read_input_tokens": 0,
+    "input_tokens": 2,
+    "output_tokens": 3621,
+    "output_tokens_details": { "thinking_tokens": 3421 }
+  }
+}
+

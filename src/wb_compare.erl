@@ -24,7 +24,7 @@ compare(Task, Text, ReplyName) ->
     end.
 
 run(Task, Text, Bytes, Exe, ReplyName) ->
-    Inputs = wb_task:inputs(),
+    Inputs = wb_task:inputs(Task),
     #{export := Export} = wb_task:get(Task),
     Check = wb_check:check(Task, Text),
     Erlang = erlang_outcomes(Check, Inputs),
@@ -132,17 +132,27 @@ outcome({ok, V}) -> integer_to_list(V);
 outcome({error, Why}) -> ["error (", Why, ")"];
 outcome({rejected, V}) -> ["rejected (", atom_to_list(V), ")"].
 
-%% Writes `Dir/<os>-<arch>.config' and returns its path.
+%% Writes `Dir/<task>-<label>/<os>-<arch>.config' for a reply under
+%% `trials/' or `examples/', so that runs of different replies on one host
+%% do not overwrite each other, and returns its path.
 -spec record(comparison(), file:filename()) -> file:filename().
 record(C, Dir) ->
-    Slug = wb_host:slug(maps:get(host, C)),
-    Path = filename:join(Dir, <<Slug/binary, ".config">>),
+    Slug = binary_to_list(wb_host:slug(maps:get(host, C))),
+    Path = filename:join([Dir, record_name(maps:get(reply, C)), Slug ++ ".config"]),
     Keys = [recorded_on, reply, task, module_bytes, module_sha256, host, inputs,
             erlang_wasm, wasmtime, agree, first_discrepancy, verdict],
     Terms = [io_lib:format("~tp.~n", [{K, maps:get(K, C)}]) || K <- Keys],
     ok = filelib:ensure_dir(Path),
     ok = file:write_file(Path, ["%% Written by bin/wasm-bytes compare --record.\n" | Terms]),
     Path.
+
+record_name(Reply) ->
+    case filename:split(unicode:characters_to_list(Reply)) of
+        [Kind, Task, Label, "reply.txt"] when Kind =:= "trials"; Kind =:= "examples" ->
+            Task ++ "-" ++ Label;
+        Parts ->
+            filename:rootname(lists:last(Parts))
+    end.
 
 line(Tag, Text) ->
     [io_lib:format("  ~-12s ", [Tag]), Text, $\n].

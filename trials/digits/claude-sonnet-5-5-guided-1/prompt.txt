@@ -1,0 +1,117 @@
+Write a complete WebAssembly module in the binary format (the bytes of a
+.wasm file, version 1) and reply with its bytes as hex.
+
+The module exports one function, named "digit_sum", with one i32 parameter
+and one i32 result:
+
+  digit_sum(x) returns the sum of the decimal digits of x.
+  For a negative x it uses the digits of -x: digit_sum(-907) is 16.
+  For the smallest i32, -2147483648, it returns 47, the digit sum of
+  2147483648.
+  For example, digit_sum(0) is 0 and digit_sum(1234567890) is 45.
+
+The module has exactly one function, the exported one, and exports nothing
+else. It has no imports, no memory and no start function.
+
+You write every byte: the magic number and version, every section id, every
+section length, every function body length, every local declaration and
+every instruction. Nothing will be added to your bytes and no length will be
+corrected: the bytes you send are the bytes that run.
+
+Work through these steps before you reply. Your reply contains only the
+final bytes.
+
+1. Write the function as WebAssembly instructions, one per line, using the
+   names in the instruction table below. After each instruction, note what
+   is on the stack. The function must end with exactly one i32 on it.
+2. Decide which locals the function needs besides its parameter. The
+   parameter is local 0; locals you declare are numbered after it.
+3. Encode each instruction: its byte from the table, then its immediate.
+   A local index or a label depth is an unsigned LEB128 number, an
+   i32.const value is a signed LEB128 number, a block type is one byte.
+4. Build the function body: the local declarations, the instruction bytes,
+   and 0b for the end of the function. Count its bytes.
+5. Build each section: its id, the size of its contents in bytes, then the
+   contents. Count each section again.
+6. Put the header and the sections together, in the order type, function,
+   export, code. Count the total, then reply with the bytes.
+
+Module layout
+
+  header            00 61 73 6d 01 00 00 00
+  section           id byte, size of the contents (unsigned LEB128), contents
+  vector            count (unsigned LEB128), then the items
+  type section      id 01: a vector of function types. A function type is
+                    60, a vector of parameter types, a vector of result
+                    types. i32 is 7f.
+  function section  id 03: a vector of type indices, one per function.
+  export section    id 07: a vector of exports. An export is the name's
+                    length, the name's bytes, 00 for a function, and the
+                    function's index.
+  code section      id 0a: a vector of function bodies. Each body is its
+                    size in bytes, then a vector of local groups (a count
+                    and a type, such as 02 7f for two i32 locals), then the
+                    instructions, then 0b.
+
+Numbers
+
+  Unsigned LEB128 (sizes, counts, indices, label depths): take the number 7
+  bits at a time, lowest bits first, and add 80 to every byte except the
+  last. 5 is 05, 200 is c8 01.
+  Signed LEB128 (i32.const): the same, but stop only when the bits left are
+  all 0 and the last byte's 40 bit is clear, or the bits left are all 1 and
+  that bit is set. 3 is 03, 63 is 3f, 64 is c0 00, 127 is ff 00, 128 is
+  80 01, 300 is ac 02, -1 is 7f, -64 is 40, -65 is bf 7f.
+
+Instructions
+
+  In the stack column, b is the value pushed last. A comparison pushes 1
+  for true and 0 for false. A block type is 40 for no result, 7f for one
+  i32 result. Label depth 0 is the innermost enclosing block, loop or if,
+  1 the one around it, and so on. A branch to a loop goes back to its
+  start; a branch to a block or an if goes past its end.
+
+  byte  instruction  immediate       stack
+  02    block        block type
+  03    loop         block type
+  04    if           block type      c ->        runs when c is not 0
+  05    else
+  0b    end                                      ends a block, loop, if or the function
+  0c    br           label depth
+  0d    br_if        label depth     c ->        branches when c is not 0
+  0f    return
+  1a    drop                         a ->
+  1b    select                       a b c ->    a when c is not 0, else b
+  20    local.get    local index     -> v
+  21    local.set    local index     v ->
+  22    local.tee    local index     v -> v
+  41    i32.const    signed LEB128   -> n
+  45    i32.eqz                      a -> a == 0
+  46    i32.eq                       a b -> a == b
+  47    i32.ne                       a b -> a != b
+  48    i32.lt_s                     a b -> a < b, signed
+  49    i32.lt_u                     a b -> a < b, unsigned
+  4a    i32.gt_s                     a b -> a > b, signed
+  4b    i32.gt_u                     a b -> a > b, unsigned
+  4c    i32.le_s                     a b -> a <= b, signed
+  4d    i32.le_u                     a b -> a <= b, unsigned
+  4e    i32.ge_s                     a b -> a >= b, signed
+  4f    i32.ge_u                     a b -> a >= b, unsigned
+  6a    i32.add                      a b -> a + b
+  6b    i32.sub                      a b -> a - b
+  6c    i32.mul                      a b -> a * b
+  6d    i32.div_s                    a b -> a / b, signed
+  6e    i32.div_u                    a b -> a / b, unsigned
+  6f    i32.rem_s                    a b -> remainder of a / b, signed
+  70    i32.rem_u                    a b -> remainder of a / b, unsigned
+  71    i32.and                      a b -> bitwise a and b
+  72    i32.or                       a b -> bitwise a or b
+  73    i32.xor                      a b -> bitwise a xor b
+
+Reply with only the bytes, as pairs of hexadecimal digits, for example:
+
+0f a0 7c
+
+Whitespace and line breaks between pairs are allowed. Do not split a pair.
+Do not add anything else: no explanation, no code fence, no 0x prefix, no
+comments.

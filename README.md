@@ -68,9 +68,23 @@ bin/wasm-bytes compare write trials/write/claude-sonnet-5-5-1/reply.txt
 
 The same comparison passed on macOS on arm64, and in Linux containers on arm64 and on emulated x86_64. All three runs used one Mac. A run on separate x86_64 hardware is still pending. You can also load the module from JavaScript. [Platform runs and how to repeat them](doc/evidence.md#3-the-same-bytes-in-another-engine-and-on-other-hosts) · [Node.js example](doc/runner.md#call-the-module-from-nodejs)
 
+## A slightly larger program
+
+A second task asks for `digit_sum`, which adds up the decimal digits of a 32-bit integer. For a negative number it uses the digits of the absolute value, so −2147483648 gives 47. The function needs a loop, a local variable, and unsigned division. All three models returned a working module on their one recorded attempt. Opus and Sonnet sent the same 90 bytes, and Haiku sent 95. Each module matched the reference on all 1,353 tested inputs, in erlang_wasm and in Wasmtime. [Prompt](prompts/digits.txt) · [Results and limits](doc/status.md#a-slightly-larger-program-digit_sum)
+
+```sh
+bin/wasm-bytes check digits trials/digits/claude-haiku-5-5-1/reply.txt
+```
+
+```text
+  hex      95 bytes
+  answers  1353 of 1353 match the reference
+  verdict  pass
+```
+
 ## Try your own model
 
-1. **Send the write prompt.** Run the command below and paste its entire output into your model. This includes the retry rule, the required function signature, and the instructions for formatting the reply.
+1. **Send the write prompt.** Run the command below and paste its entire output into your model. This includes the retry rule, the required function signature, and the instructions for formatting the reply. For a small or local model, add `--guided`. That version includes the byte of each instruction and a step-by-step method. [Guided prompts](trials/README.md#use-the-guided-prompt)
 
    ```sh
    bin/wasm-bytes prompt write
@@ -119,5 +133,5 @@ The program ran, but it declined to retry status 599. That single input is enoug
 
 - See what each claim rests on, with the commands and run records. [Evidence](doc/evidence.md)
 - Run `bin/wasm-bytes demo` to replay everything locally. The summary compares each observed verdict with its saved label. A deliberately wrong example counts as a successful replay when it fails as expected.
-- Read the first five recorded trials and their limits. Opus and Sonnet each passed both tasks on their recorded attempts. Haiku missed the write task and received no revision prompt. [Project status](doc/status.md)
+- Read the recorded trials and their limits. Opus and Sonnet passed every task on their recorded attempts. A local model run through Ollama failed both tasks with the baseline prompts, then passed `digit_sum` with the guided prompt. [Project status](doc/status.md)
 - Save a run from your own model so someone else can replay it. [Record a trial](trials/README.md)

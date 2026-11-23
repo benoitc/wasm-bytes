@@ -1,0 +1,2357 @@
+We need answer with only hex pairs. Need construct WebAssembly binary module version 1. Need ensure exact bytes. Let's reason carefully.
+
+We need module: exports one function named "digit_sum", one i32 param, one i32 result. Exactly one function. No imports, no memory, no start. Need encode valid wasm.
+
+Plan: implement function digit_sum(x). Algorithm:
+- Handle negative: compute n = abs(x). In i32, abs(INT_MIN) overflows; need special case. Could use i64? But instructions with i64 are allowed; no memory. Need i32 result. We can use i64 to handle INT_MIN.
+- Easier: if x < 0, compute using i64: let m = -(i64)x; else m = (i64)x. Since x i32, sign-extend to i64 with i32.extend_i64_s. Then if x < 0, negate? But if x is i32 negative, -(i64)x is positive up to 2147483648 fits i64. If x nonnegative, (i64)x equals x. So m = abs value in i64.
+- Sum decimal digits: loop while m > 0: s += m % 10; m /= 10. Then result i32 s. Need handle m=0 -> s=0. Loop condition while m > 0; for m=0 skip, s=0. Good.
+
+Need produce wasm with blocks/loops. Simpler: unrolled decimal digits? Max 10 digits (2147483648). Could do loop. Need encode instructions carefully.
+
+Wasm encoding:
+Magic: 00 61 73 6d (version 1)
+Sections:
+Type section id=1
+Function section id=3
+Export section id=7
+Code section id=10
+(No import id=2, no memory id=5, no global id=6, no start id=8, no element id=9, no data id=11)
+
+Need order? Sections can be in order 1,3,7,10? The spec says section ids must be in order? In binary format, sections should be in order of section id? Actually the binary format has sections in order: type, import, function, table, memory, global, export, start, elem, code, data... I recall: "The sections are sorted by section id"? Let's recall: In the Wasm binary format, each section has an id; the order of sections in a module is required to be in increasing order of section id? I think yes? Let's check memory: The spec defines binary format: module = magic version section*; section = id vec(byte); ids are ordered? In text format, order fixed. In binary, validation may require sections sorted? Many producers emit in order. Need be safe: use order type(1), function(3), export(7), code(10). That is increasing (1<3<7<10). Good.
+
+Need build exactly.
+
+Let's define type: functype (i32)->(i32). Type section:
+id=1
+size = ?
+contents: count u32=1; type record:
+  0x60 (functype), 0x01 (param count), 0x7f (i32), 0x01 (result count), 0x7f (i32)
+record bytes: 60 01 7f 01 7f = 6 bytes.
+contents = 01 (count) + 6 = 7 bytes.
+section bytes: id 01, size 07, then 01 60 01 7f 01 7f.
+Total: 01 07 01 60 01 7f 01 7f.
+
+Function section:
+id=3
+contents: count u32=1; entry: u32 type index =0.
+bytes: 01 00 00 00 00 = 5 bytes? Count=01 (4 bytes? Wait count is u32, so 4 bytes: 01 00 00 00) then entry u32=0 (00 00 00 00) => 8 bytes. Actually count u32=1 -> 01 00 00 00. entry type idx u32=0 -> 00 00 00 00. contents = 8 bytes (4+4). size=08.
+section bytes: 03 08 01 00 00 00 00 00 00 00.
+
+Export section:
+id=7
+contents: count u32=1; export record: name len u32=10? "digit_sum" length? Let's count: d i g i t _ s u m = 9? "digit" 5? d(1)i2g3i4t5 =5, "_"=6, s=7,u=8,m=9. Yes 9 characters. Let's count "digit_sum": d i g i t _ s u m = 9. Good. name len u32=9, name bytes "digit_sum" (9 bytes), kind byte 0x00 (function), index u32=0.
+record bytes: 09 00 00 00 + "digit_sum" 9 bytes + 00 + 00 00 00 00 = 4+9+1+4 =18 bytes.
+contents: count u32=1 (4 bytes) + 18 =22 bytes. size=22 (0x16).
+section bytes: 07 16 01 00 00 00 09 00 00 00 64 69 67 69? Let's encode name precisely: "digit_sum" ASCII: d=64 i=69 g=67 i=69 t=74 _=5f s=73 u=75 m=6d. Yes: 64 69 67 69 74 5f 73 75 6d. Wait "digit" letters: d i g i t = 64 69 67 69 74. Then _ =5f, s=73,u=75,m=6d. Good.
+Then kind 00, index 00 00 00 00.
+Section bytes: 07 16 01 00 00 00 09 00 00 00 64 69 67 69 74 5f 73 75 6d 00 00 00 00 00.
+
+Code section:
+id=10 (0x0a)
+contents: count u32=1; body: code entry.
+code entry = size u32 (size of code body), then body: locals vec (count u32 then entries), then instructions, then 0x0b end.
+Actually code section contents: vec(code) where code = size vec(byte); code body = locals vec(local) instr* end.
+Local declaration: locals vec: count u32 then local entries (count u32, type byte). We need locals. Let's decide instructions and locals.
+
+Need implement abs and sum. Could avoid locals by using stack. But easier with locals. Function signature: one i32 param x. Locals: need i64 m? We can use local 1 as i64 m, local 2 as i32 s? Need store sum. Use i32 for sum (max 9? actually max sum digits of 2147483648 = 47? Wait sum digits of 2147483648 = 2+1+4+7+4+8+3+6+4+8 =? 2+1=3+4=7+7=14+4=18+8=26+3=29+6=35+4=39+8=47. yes <=? For 999999999 sum=81? but x abs max 2147483648 =47, and x=-2147483648 special; sum max 47? What about x=-999999999 -> 81? But x range -2147483648..2147483647, abs max 2147483648, sum max 47? Actually 999999999 sum = 81 (9*9), which is within range, and is abs value for negative x. So sum can be up to? 999999999 -> 81, 1999999999 ->? within range, sum=1+8*9? Let's calculate max digit sum over abs values 0..2147483648. 1999999999 sum =1+9*8? Actually digits 1 9 9 9 9 9 9 9 9 9 =1+9*9=82. But is 1999999999 <=2147483647 yes. Actually 1999999999 is 10 digits? 1,999,999,999 = 1,999,999,999 (10 digits), sum=1+9*9=82? 9 digits after? Let's count: 1 9 9 9 9 9 9 9 9 9 = 1 + nine 9s? There are 9 digits after 1? 10-digit number: digits positions: 1 (ten-digit?) Let's count "1999999999": chars: '1'(1) '9'(2) '9'(3) '9'(4) '9'(5) '9'(6) '9'(7) '9'(8) '9'(9) '9'(10) = 1 + nine 9s =1+81=82. Is 1999999999 <= 2147483647? yes. Could there be higher sum like 2099999999? 2099999999 >2147483647? 2,099,999,999 >2,147,483,647? No, 2,099,999,999 < 2,147,483,647? Compare: 2.099B < 2.147B yes, and is <=2147483647? 2099999999 <=2147483647 yes. Sum=2+0+8*9? Let's count "2099999999": digits 2,0,9,9,9,9,9,9,9,9 = 2+0+ eight? digits after 0: positions 3-10 = eight 9s? positions: 2(1) 0(2) 9(3)9(4)9(5)9(6)9(7)9(8)9(9)9(10) = 2+0+8*9=74? Actually 8 nines =72, total 74. Less than 82. 1999999999 sum 82 likely max? What about 999999999 = 81. 1999999999=82. 2099999999=74. 1399999999 =1+3+? maybe less. Anyway sum < 255, i32 fine.
+
+Need sum as i32. Use locals: local 1: i64 m; local 2: i32 s; maybe local 3? Let's design.
+
+Instructions:
+1. local.get 0 (x)
+2. i32.extend_i64_s -> i64 (sign-extend)
+3. if x < 0? Actually we can compute abs via i64: if (i32.wrap_i64 m) < 0? Hmm simpler: compare x <0, if so negate i64 value.
+   Option A:
+   local.get 0 (i32 x)
+   i32.const 0
+   i32.lt_s
+   if
+     local.get 0
+     i32.extend_i64_s
+     i64.const 0? no.
+   Better: 
+   local.get 0
+   i32.extend_i64_s  (stack: i64 y = sign_extend(x))
+   local.get 0
+   i32.const 0
+   i32.lt_s
+   if
+     i64.const 0
+     i64.sub? Wait stack at if entry: we have i64 y then i32 cond. Need cond on top. Order: push i64 y, push i32 x? Let's construct carefully.
+   We can do:
+   local.get 0
+   i32.extend_i64_s
+   local.get 0
+   i32.const 0
+   i32.lt_s
+   if
+     i64.const 0
+     i64.sub? Hmm stack inside if: i64 y (bottom), cond (top) consumed by if -> entering if with i64 y on stack. We want negate y: i64.const 0; i64.sub -> -y. But if y = -(-2147483648)=2147483648, i64.const 0 - i64 y? Wait if y = -2147483648 (as i64), -y = 2147483648. 0 - (-2147483648) = 2147483648. Good. So inside if: i64.const 0, i64.sub (result i64). Else keep y. After if stack has i64 m (abs). Good. But we also need cond; we pushed cond after y, then if consumes cond and enters with y. Valid.
+   Then local.set 1 (m)
+   local.get 2? Need init s=0. We can set local 2 = 0 before loop. Let's allocate local 1 i64 m, local 2 i32 sum. But locals declaration must include all locals. Local 0 is param (i32). We can declare locals: local 1 i64, local 2 i32.
+   Sequence:
+   local.get 0
+   i32.extend_i64_s
+   local.get 0
+   i32.const 0
+   i32.lt_s
+   if
+     i64.const 0
+     i64.sub
+   else
+     nop? (no else)
+   end
+   local.set 1
+   i32.const 0
+   local.set 2
+   loop
+     local.get 1
+     i64.const 0
+     i64.eq? Need loop condition: while m > 0. We can do loop with condition m != 0? Use `loop` then inside: local.get 1; if (i64.eq? no)
+   Structure for while:
+   loop $L
+     local.get 1
+     i64.const 0
+     i64.eq
+     if
+       br $L? no
+   Need break when m ==0. Let's design.
+   Common pattern for while (cond) body:
+   loop
+     cond
+     if
+       body
+       br loop? (back-edge)
+     end
+     br exit? 
+   Need break out when cond false.
+   Alternative use `block` with `br_if`:
+   block $done
+     local.get 1
+     i64.const 0
+     i64.eq
+     br_if $done
+     local.get 1
+     i64.const 10
+     i64.rem
+     i64.extend_i32_u? Need convert remainder to i32 and add to sum. i64.rem gives i64 0..9. Need i32: i64.wrap_i32? Since 0..9, i64.wrap_i32 fine (truncates). Or i64.extend_i32_u then i32.wrap_i64? Hmm.
+     Better keep sum as i64? Local 2 as i64 sum, then final i64.wrap_i32. Sum max 82, fits. That avoids conversion each iteration. Use local 2 i64 s.
+     local.get 1
+     i64.const 10
+     i64.rem
+     local.get 2
+     i64.add
+     local.set 2
+     local.get 1
+     i64.const 10
+     i64.div_u? m positive (abs) so i64.div_s or div_u both fine. m>=0, use i64.div_s? For m=0, but loop guard prevents m=0. Use i64.div_u (unsigned) for clarity. Result i64.
+     local.set 1
+     br $done? no, need continue loop: `br $loop`. But if using block, need `loop` label for back edge. Use loop $L:
+       local.get 1
+       i64.const 0
+       i64.eq
+       br_if $done? But labels: In a `loop`, br $loop jumps to loop start, br $done? We can nest.
+   Simplest pattern:
+   loop $L
+     local.get 1
+     i64.const 0
+     i64.eq
+     if
+       br $L? No.
+   Let's define:
+   loop $L
+     local.get 1
+     i64.const 0
+     i64.eq
+     br_if $end? can't reference end label outside? labels can refer to enclosing block/loop by depth. Use explicit labels via nesting:
+   loop $L
+     block $B
+       local.get 1
+       i64.const 0
+       i64.eq
+       br_if $B? Hmm.
+   Let's use well-known while loop encoding with `loop` and `br_if`:
+   loop $L
+     ; stack: none (inside loop)
+     local.get 1
+     i64.const 0
+     i64.eq
+     br_if $exit  ; but no $exit label unless we have an enclosing block. Use `block $exit` around the loop? Pattern:
+   block $done
+     loop $L
+       local.get 1
+       i64.const 0
+       i64.eq
+       br_if $done
+       ; body
+       local.get 1
+       i64.const 10
+       i64.rem
+       local.get 2
+       i64.add
+       local.set 2
+       local.get 1
+       i64.const 10
+       i64.div_u
+       local.set 1
+       br $L
+     end
+   end
+   This is valid: `block $done` label depth 0? Let's count labels. Inside block $done, loop $L. Inside loop, labels: loop (depth 0), block (depth 1). `br_if $done` would be br_if with label depth 1 (to block). In wasm encoding, `br_if` takes labelidx u32. At point inside loop, label indices: 0 = loop $L, 1 = block $done. So `br_if 1`. Body then `br 0` for loop back-edge. At end of loop, if br_if didn't exit, it falls through end of loop? Wait structure: loop starts; we push condition; br_if $done exits block (when m==0). If not exit, execute body and br $L (back to loop top). Good. When loop falls through (without br), it exits loop to after loop, but we have br $L always at end of body, so loop only exits via br_if to block. The `end` of loop is reached only if body doesn't br; but body ends with br $L so never falls through. Fine.
+   After block $done, stack empty. Then result: local.get 2 (i64 sum); i64.wrap_i32 (trunc to i32); end.
+   Need be careful: local.get 2 (i64), i64.wrap_i32 -> i32, then end function. Good.
+
+Potential issue: `if` in abs computation with no else: `if` with empty else. Encoding: `if` opcode 0x04, then blocktype (u32), then instructions, then `else`? For no else, after instructions directly `end`? Wait encoding of if: `if` opcode, blocktype, then instr*, then `else` opcode (0x05)? Actually in binary format, `if` is encoded as `if` (0x04) + blocktype + instr* + `else` + instr* + `end`? Need recall precisely.
+
+WebAssembly binary instruction encoding:
+- `block` = 0x02, blocktype (u32), instr*, `end` (0x0b)
+- `loop` = 0x03, blocktype (u32), instr*, `end`
+- `if` = 0x04, blocktype (u32), instr*, `else` (0x05), instr*, `end`
+Is `else` required even if empty? I recall the `if` instruction is encoded as `if` blocktype instr* `else` instr* `end`, where the else part may be empty. Let's verify. In the spec's binary format: 
+```
+instr ::= ... | 0x02 blocktype instr* 0x0b | 0x03 blocktype instr* 0x0b | 0x04 blocktype instr* 0x05 instr* 0x0b | 0x0c ...
+```
+Yes I think `if` always includes `else` opcode. Some toolchains may emit `else` with empty instructions. Let's confirm with examples: In wat2wasm, `(if (i32.eqz (local.get 0)) (then))`? Hmm. Actually in binary, `if` without else: I have seen bytes `04 40 0b`? Let's recall from real wasm: A function `(func (param i32) (result i32) local.get 0)` encodes: `0x20 0x00 0x0b`. For if, e.g. `(if (i32.const 1) (then i32.const 2))`, wat2wasm output? I vaguely recall bytes `04 40 41 01 41 02 05 0b`? That would be if blocktype void(0x40), i32.const 1, i32.const 2, else, end. Yes else present even if empty. I think correct: if requires `else` opcode. Need include `else` with empty instr* then `end`.
+
+Also blocktype: For block/loop with no result and no params, blocktype = 0x40 (void). For `if` same: blocktype 0x40 if it yields no result. For loop with no result: 0x40. Good.
+
+Need ensure local declarations and types. Locals: we have param i32 (local 0). We declare local 1: i64 (type 0x7e), local 2: i64 (type 0x7e). In locals vec: count u32 = 2 (two local entries? Actually locals vec is count of entries, each entry = count u32 + type byte). We can declare each separately: entry1 count=1 type=0x7e (local 1), entry2 count=1 type=0x7e (local 2). Or one entry count=2 type=0x7e (locals 1 and 2 both i64). That's cleaner: locals = count u32=1, then entry: count u32=2, type byte 0x7e. That declares 2 locals both i64 (locals 1,2). Good. Body: locals vec: 01 02 00 00 00 7e. Wait count=1 (u32) = 01 00 00 00; entry count=2 (u32) = 02 00 00 00; type = 7e. So bytes: 01 00 00 00 02 00 00 00 7e. That's 9 bytes? count u32 (4) + entry count u32 (4) + type (1) =9. Yes.
+
+But do we need local 2 as i64? yes sum. Good.
+
+Function body:
+local.get 0 (0x20 0x00)
+i32.extend_i64_s (0xAC? Need opcode for i32.extend_i64_s). Let's recall numeric instructions opcodes:
+- i32.const = 0x41
+- i64.const = 0x42
+- f32.const = 0x43? Actually f32.const=0x43? Wait: numeric instructions:
+  - 0x41 i32.const, 0x42 i64.const, 0x43 f32.const, 0x44 f64.const? Hmm I need exact opcode values.
+
+Let's recall WebAssembly opcode table carefully.
+
+From spec (binary opcodes):
+Control:
+0x00 unreachable
+0x01 nop
+0x02 block
+0x03 loop
+0x04 if
+0x05 else
+0x06 br
+0x07 br_if
+0x08 br_table
+0x0c? Wait need exact.
+Let's list precisely:
+- 0x00 unreachable
+- 0x01 nop
+- 0x02 block
+- 0x03 loop
+- 0x04 if
+- 0x05 else
+- 0x06 br
+- 0x07 br_if
+- 0x08 br_table
+- 0x0c? No, maybe 0x0b end, 0x0c return, 0x0d call, 0x0e return_call? Hmm.
+
+Let's recall from wasm opcode list:
+```
+unreachable     0x00
+nop             0x01
+block           0x02
+loop            0x03
+if              0x04
+else            0x05
+br              0x06
+br_if           0x07
+br_table        0x08
+return          0x0b? 
+```
+Wait no. Let's check. I know in wasm, `end` is 0x0b, `return` is 0x0f? Let's recall from actual bytes: A simple function `(func (result i32) i32.const 42 end)` encodes: `00 41 2a 0b`? Body: locals (00 00 00 00), i32.const 42 (41 2a), end (0b) => `00 00 00 00 41 2a 0b`. Yes end=0x0b. Good. Return opcode? In `(func return)`, I recall `0x0f`? Let's recall: control flow opcodes:
+- block 0x02
+- loop 0x03
+- if 0x04
+- else 0x05
+- br 0x06
+- br_if 0x07
+- br_table 0x08
+- return 0x0b? But end is 0x0b? Conflict.
+
+Let's get exact. I know `end` is 0x0b? Let's verify by memory of wasm bytes: `(module (func (export "f") i32.const 1 end))` compiled bytes: `00 61 73 6d 01 00 00 00 01 04 01 60 00 01 7f 03 02 01 00 07 0b 01 00 07 04 01 66 00 00 00 00 00 0a 07 01 06 00 00 00 00 41 01 0b` maybe. In code body, after locals (4 bytes 00 00 00 00), i32.const 1 (41 01), end (0b). Code body length = 4 + 2 +1 =7; code section body size=7. Yes end=0x0b. Good. Return opcode maybe 0x0f? Let's recall: `return` is 0x0f? Actually I recall `return` opcode is 0x0f? Hmm. In wasm, `return` might be 0x0f. `call` is 0x10, `return_call` maybe 0x11? Let's not need return.
+
+Control flow exact opcodes (from spec):
+```
+block       0x02
+loop        0x03
+if          0x04
+else        0x05
+br          0x06
+br_if       0x07
+br_table    0x08
+return      0x0f? 
+call        0x10
+return_call 0x11? 
+throw       0x14? 
+end         0x0b
+```
+Wait `end` is 0x0b and `return` maybe 0x0f? Let's check by known bytes: A function with `return` e.g. `(func i32.const 1 return)` encodes `00 00 00 00 41 01 0f 0b`? I think return opcode is 0x0f. But we don't need return. Good.
+
+Numeric instructions opcodes: Need exact for i32.extend_i64_s, i32.const, i32.lt_s, i64.const, i64.sub, i64.eq, i64.rem, i64.add, i64.div_u, i64.wrap_i32, i32.const etc.
+
+Let's recall exact opcode values from spec:
+
+Integer instructions:
+- `i32.const` = 0x41
+- `i64.const` = 0x42
+- `f32.const` = 0x43? maybe 0x43 is f32.const? Actually `f32.const` = 0x43? Wait f32.const opcode maybe 0x43? No, I recall `f32.const` is 0x43? Let's recall: In wasm, `f32.const` opcode is 0x43? Hmm. But we don't need floats.
+
+Integer operations:
+- `i32.eqz` = 0x45? Let's recall exact.
+
+I need to be precise. Let's reconstruct opcode table from memory. WebAssembly numeric instructions:
+```
+0x41 i32.const
+0x42 i64.const
+0x43 f32.const
+0x44 f64.const
+0x45 i32.eqz
+0x46 i32.eq
+0x47 i32.ne
+0x48 i32.lt_s
+0x49 i32.lt_u
+0x4a i32.gt_s
+0x4b i32.gt_u
+0x4c i32.le_s
+0x4d i32.le_u
+0x4e i32.ge_s
+0x4f i32.ge_u
+0x50 i32.clz
+0x51 i32.ctz
+0x52 i32.popcnt
+0x53 i32.add
+0x54 i32.sub
+0x55 i32.mul
+0x56 i32.div_s
+0x57 i32.div_u
+0x58 i32.rem_s
+0x59 i32.rem_u
+0x5a i32.and
+0x5b i32.or
+0x5c i32.xor
+0x5d i32.rotl
+0x5e i32.rotr
+0x5f i32.shift_left
+0x60 i32.shift_right_s
+0x61 i32.shift_right_u
+0x62 i32.eqz? no
+```
+Hmm not sure. Let's recall more accurately. Actually I know `i32.add` is 0x6a? Wait.
+
+Let's use memory from assembling: `(i32.add (local.get 0) (i32.const 1))`: bytes maybe `20 00 41 01 6a`? Hmm.
+
+I need exact opcodes. Let's systematically recall from wasm spec.
+
+I have used wasm before. Opcodes (from spec Appendix A maybe):
+```
+unreachable        0x00
+nop                0x01
+block              0x02
+loop               0x03
+if                 0x04
+else               0x05
+br                 0x06
+br_if              0x07
+br_table           0x08
+return             0x0b? no
+call               0x10
+call_indirect      0x11? 
+throw              0x14?
+rethrow            0x15?
+end                0x0b
+```
+No. Let's find exact via reasoning? Better to recall from known wasm assembly opcode table.
+
+Known opcodes I'm fairly confident about:
+- `drop` = 0x1a
+- `select` = 0x1b
+- `local.get` = 0x20
+- `local.set` = 0x21
+- `local.tee` = 0x22
+- `global.get` = 0x23
+- `global.set` = 0x24
+- `table.get` = 0x25? maybe 0x25
+- `table.set` = 0x26
+- `table.size` = 0x27?
+- `table.grow` = 0x28?
+- `table.fill` = 0x29? (newer)
+- `memory.size` = 0x3f? Hmm no.
+- `i32.load` = 0x28? Wait loads are 0x28-0x33? Let's recall: `i32.load` = 0x28? Actually memory instructions: `i32.load` 0x28, `i64.load` 0x29, `f32.load` 0x2a, `f64.load` 0x2b, `i32.load8_s` 0x2c, `i32.load8_u` 0x2d, `i32.load16_s` 0x2e, `i32.load16_u` 0x2f, `i64.load8_s` 0x30, `i64.load8_u` 0x31, `i64.load16_s` 0x32, `i64.load16_u` 0x33, `i64.load32_s` 0x34, `i64.load32_u` 0x35, `f32.load32_s`? no.
+- `i32.store` = 0x36? etc.
+- `memory.size` = 0x3f? maybe 0x3f? Actually `memory.size` = 0x3f? no.
+
+This is hard from memory. Need exact opcodes. Since final answer depends heavily on opcodes. Need be accurate. Let's recall from reliable memory.
+
+I know WebAssembly opcode table fairly well from docs:
+```
+0x00 unreachable
+0x01 nop
+0x02 block
+0x03 loop
+0x04 if
+0x05 else
+0x06 br
+0x07 br_if
+0x08 br_table
+0x0b end
+0x0c return
+0x0d call
+0x0e return_call? maybe
+0x10 call_indirect
+0x11 drop? no
+```
+No, let's not guess. Need exact. Let's reconstruct systematically from wasm binary spec.
+
+I remember reading the wasm spec binary format. The instruction opcodes are listed in the spec with hex values. I have some memory:
+```
+unreachable          0x00
+nop                  0x01
+block                0x02
+loop                 0x03
+if                   0x04
+else                 0x05
+br                   0x06
+br_if                0x07
+br_table             0x08
+return               0x0b? no
+```
+Let's check with actual known code: `local.get` is 0x20. That I'm sure. `global.get` is 0x23. `drop` is 0x1a. `select` is 0x1b. `call` is 0x10. `return` is 0x0f? Let's verify by known wasm: `(func (result i32) return)` would be body: locals(00) + 0f + end(0b) => size 6? Many wasm docs show `return` = 0x0f. Yes I think `return` = 0x0f, `call` = 0x10, `call_indirect` = 0x11? Hmm but then `drop` =0x1a, `select`=0x1b, `local.get`=0x20. That fits: 0x0f return, 0x10 call, 0x11 return_call? no maybe call_indirect =0x11? Actually I recall `call_indirect` = 0x11? Let's not need.
+
+Memory instructions likely start at 0x28. Numeric instructions start at 0x41. Yes that rings true: 0x20-0x2x are locals/globals/memory? Wait memory instructions are 0x28 onward? Hmm but local.get=0x20, global.get=0x23, table.get=0x25, memory.size=0x3f? no.
+
+Let's recall from spec (I have seen the table):
+```
+0x00 unreachable
+0x01 nop
+0x02 block
+0x03 loop
+0x04 if
+0x05 else
+0x06 br
+0x07 br_if
+0x08 br_table
+0x0b end
+0x0c return
+0x0d call
+0x0e return_call? 
+0x10 call_indirect?
+0x11 drop? 
+```
+No. Let's step back.
+
+Maybe I can avoid uncertain opcodes by using only very well-known ones. But I still need i32/i64 opcodes. I know many by memory: `i32.add` = 0x6a? Wait that's for? Let's recall by pattern: `i32.const` = 0x41, `i64.const` = 0x42, `f32.const` = 0x43? `f64.const` = 0x44? Then `i32.eqz`=0x45, `i32.eq`=0x46, `i32.ne`=0x47, `i32.lt_s`=0x48, `i32.lt_u`=0x49, `i32.gt_s`=0x4a, `i32.gt_u`=0x4b, `i32.le_s`=0x4c, `i32.le_u`=0x4d, `i32.ge_s`=0x4e, `i32.ge_u`=0x4f. That sequence seems plausible. Then `i32.clz`=0x50, `i32.ctz`=0x51, `i32.popcnt`=0x52, `i32.add`=0x53, `i32.sub`=0x54, `i32.mul`=0x55, `i32.div_s`=0x56, `i32.div_u`=0x57, `i32.rem_s`=0x58, `i32.rem_u`=0x59, `i32.and`=0x5a, `i32.or`=0x5b, `i32.xor`=0x5c, `i32.rotl`=0x5d, `i32.rotr`=0x5e, `i32.shift_left`=0x5f, `i32.shift_right_s`=0x60, `i32.shift_right_u`=0x61, `i32.eqz`? Wait we already used 0x45 for i32.eqz. Hmm duplicate.
+
+Actually I recall `i32.eqz` is 0x45? maybe wrong. Let's check by known bytes: `(i32.eqz (local.get 0))` maybe bytes `20 00 45`. That sounds plausible. `i32.eq` maybe 0x46. Fine.
+
+Then after i32.shift_right_u (0x61), maybe `i64.eqz`=0x62, `i64.eq`=0x63, ... `i64.add`=0x6d? Let's recall pattern: after i32.* (0x45-0x61 maybe 30 instructions), i64.* starts at 0x62? Then f32/f64 start later. Let's count: If i32.const=0x41, i64.const=0x42, f32.const=0x43, f64.const=0x44, i32.eqz=0x45, i32.eq=0x46, i32.ne=0x47, i32.lt_s=0x48, i32.lt_u=0x49, i32.gt_s=0x4a, i32.gt_u=0x4b, i32.le_s=0x4c, i32.le_u=0x4d, i32.ge_s=0x4e, i32.ge_u=0x4f, i32.clz=0x50, i32.ctz=0x51, i32.popcnt=0x52, i32.add=0x53, i32.sub=0x54, i32.mul=0x55, i32.div_s=0x56, i32.div_u=0x57, i32.rem_s=0x58, i32.rem_u=0x59, i32.and=0x5a, i32.or=0x5b, i32.xor=0x5c, i32.rotl=0x5d, i32.rotr=0x5e, i32.shift_left=0x5f, i32.shift_right_s=0x60, i32.shift_right_u=0x61, then i64.eqz=0x62, i64.eq=0x63, i64.ne=0x64, i64.lt_s=0x65, i64.lt_u=0x66, i64.gt_s=0x67, i64.gt_u=0x68, i64.le_s=0x69, i64.le_u=0x6a, i64.ge_s=0x6b, i64.ge_u=0x6c, i64.clz=0x6d, i64.ctz=0x6e, i64.popcnt=0x6f, i64.add=0x70, i64.sub=0x71, i64.mul=0x72, i64.div_s=0x73, i64.div_u=0x74, i64.rem_s=0x75, i64.rem_u=0x76, i64.and=0x77, i64.or=0x78, i64.xor=0x79, i64.rotl=0x7a, i64.rotr=0x7b, i64.shift_left=0x7c, i64.shift_right_s=0x7d, i64.shift_right_u=0x7e? Wait 0x7e is i64 type? Hmm conflict with type encoding. But opcodes can exceed type bytes; 0x7e as opcode fine? But i64.shift_right_u=0x7e? Then i32.wrap_i64 etc.
+
+Hold on: I think I conflated. Let's check actual: `i64.const` is 0x42 (I think), and type byte i64 = 0x7e. They are distinct contexts, so no conflict. But the numeric instruction range 0x45-0x?? maybe. Actually `i32.eqz` maybe 0x45? Let's verify with known wasm: `i32.eqz` opcode maybe 0x45. Yes.
+
+Then where are conversion instructions? After numeric ops, conversions: `i32.wrap_i64` = 0xa7? Hmm.
+
+Actually I recall conversion opcodes are in range 0xA7-0xB5? Let's recall: 
+- `i32.wrap_i64` = 0xA7? maybe.
+- `i64.extend_i32_s` = 0xAC? no.
+
+I need exact opcodes for: i32.extend_i64_s, i64.const, i64.sub, i64.eq, i64.rem, i64.add, i64.div_u, i64.wrap_i32, i32.const, i32.lt_s, i32.const.
+
+This is risky. Need exact opcode values. Let's reconstruct from wasm spec more accurately. I have decent memory of opcode table from the spec's appendix. Let's try to recall fully.
+
+WebAssembly binary opcode table (from spec, maybe):
+```
+0x00 unreachable
+0x01 nop
+0x02 block
+0x03 loop
+0x04 if
+0x05 else
+0x06 br
+0x07 br_if
+0x08 br_table
+0x0b end
+0x0c return
+0x0d call
+0x0e return_call
+0x0f call_indirect? no
+```
+Wait `call_indirect` I think is 0x11? Let's recall: In wasm, `call` is 0x10? Actually I think `call` is 0x10 and `call_indirect` is 0x11? But then where is `return`? Hmm.
+
+Let's recall from real code: The function `(func (param i32) (result i32) local.get 0)` body: `20 00 0b`? That is local.get (0x20), local index 0, end (0x0b). Good, end=0x0b. `return` maybe 0x0f? Not needed.
+
+I need numeric opcodes. Let's recall by mnemonic and known constants:
+- `i32.const` = 0x41 definitely (I'm confident). `i64.const` = 0x42 definitely. `f32.const` = 0x43? `f64.const` = 0x44? likely.
+- `i32.eqz` = 0x45? I'm not 100% but plausible.
+- `i32.eq` = 0x46, `i32.ne`=0x47, `i32.lt_s`=0x48, `i32.lt_u`=0x49, `i32.gt_s`=0x4a, `i32.gt_u`=0x4b, `i32.le_s`=0x4c, `i32.le_u`=0x4d, `i32.ge_s`=0x4e, `i32.ge_u`=0x4f.
+- `i32.clz` = 0x50, `i32.ctz`=0x51, `i32.popcnt`=0x52, `i32.add`=0x53, `i32.sub`=0x54, `i32.mul`=0x55, `i32.div_s`=0x56, `i32.div_u`=0x57, `i32.rem_s`=0x58, `i32.rem_u`=0x59, `i32.and`=0x5a, `i32.or`=0x5b, `i32.xor`=0x5c, `i32.rotl`=0x5d, `i32.rotr`=0x5e, `i32.shift_left`=0x5f, `i32.shift_right_s`=0x60, `i32.shift_right_u`=0x61.
+Then `i64.eqz`=0x62, `i64.eq`=0x63, `i64.ne`=0x64, `i64.lt_s`=0x65, `i64.lt_u`=0x66, `i64.gt_s`=0x67, `i64.gt_u`=0x68, `i64.le_s`=0x69, `i64.le_u`=0x6a, `i64.ge_s`=0x6b, `i64.ge_u`=0x6c, `i64.clz`=0x6d, `i64.ctz`=0x6e, `i64.popcnt`=0x6f, `i64.add`=0x70, `i64.sub`=0x71, `i64.mul`=0x72, `i64.div_s`=0x73, `i64.div_u`=0x74, `i64.rem_s`=0x75, `i64.rem_u`=0x76, `i64.and`=0x77, `i64.or`=0x78, `i64.xor`=0x79, `i64.rotl`=0x7a, `i64.rotr`=0x7b, `i64.shift_left`=0x7c, `i64.shift_right_s`=0x7d, `i64.shift_right_u`=0x7e? That would make i64.shift_right_u =0x7e. But I recall `i64.shift_right_u` maybe 0x7e? Hmm maybe.
+Then `f32.abs` etc start at 0x7f? Wait `f32.abs` = 0x8c? Not sure.
+
+Hold on: type byte for i32 is 0x7f, i64 is 0x7e. If opcodes 0x7e/0x7f were used for instructions, there'd be ambiguity in context but not an issue because instructions have different encoding. But it's possible the opcode table avoids 0x7e/0x7f? Actually the spec's instruction opcode table is separate from value types, so reusing 0x7e as opcode is okay. But I recall `i32.wrap_i64` = 0xa7, `i32.wrap_f32` = 0xb5? etc. Not needed.
+
+Wait, I have a nagging memory that `i64.add` = 0x70? Let's verify by known: `i32.add` in wasm bytes? I vaguely recall `i32.add` opcode = 0x6a. Hmm. Let's check via another route: I know `i32.const` is 0x41. The increments for comparison/arith maybe: i32.eqz=0x45? That seems too sparse (0x41 const, 0x42 i64 const, 0x43 f32 const, 0x44 f64 const, then i32.eqz=0x45). That is consistent: consts occupy 0x41-0x44, then i32.eqz=0x45. Good. Then i32.add =? Let's count from i32.eqz=0x45: eqz(45), eq(46), ne(47), lt_s(48), lt_u(49), gt_s(4a), gt_u(4b), le_s(4c), le_u(4d), ge_s(4e), ge_u(4f), clz(50), ctz(51), popcnt(52), add(53), sub(54), mul(55), div_s(56), div_u(57), rem_s(58), rem_u(59), and(5a), or(5b), xor(5c), rotl(5d), rotr(5e), shift_left(5f), shift_right_s(60), shift_right_u(61). That's 0x45 through 0x61 = 30 instructions. Then i64.eqz=0x62 ... i64.shift_right_u =? Count 30 instructions: 0x62 eqz, 0x63 eq, 0x64 ne, 0x65 lt_s, 0x66 lt_u, 0x67 gt_s, 0x68 gt_u, 0x69 le_s, 0x6a le_u, 0x6b ge_s, 0x6c ge_u, 0x6d clz, 0x6e ctz, 0x6f popcnt, 0x70 add, 0x71 sub, 0x72 mul, 0x73 div_s, 0x74 div_u, 0x75 rem_s, 0x76 rem_u, 0x77 and, 0x78 or, 0x79 xor, 0x7a rotl, 0x7b rotr, 0x7c shift_left, 0x7d shift_right_s, 0x7e shift_right_u. So i64.shift_right_u=0x7e indeed. Then f32.abs=0x7f? Hmm.
+
+But wait: value type byte i32=0x7f. If f32.abs=0x7f, then 0x7f would be both type byte and opcode in different contexts; okay. But I recall `f32.abs` opcode = 0x8c? Not sure. Let's not need.
+
+Conversion instructions: I recall `i32.wrap_i64` = 0xa7? Let's reconstruct. After floats/vectors? Hmm. In wasm MVP, conversion instructions:
+- `i32.wrap_i64` = 0xa7? maybe.
+- `i64.extend_i32_s` = 0xa8? `i64.extend_i32_u` = 0xa9?
+- `i32.trunc_f32_s` = 0xac? ...
+I don't remember.
+
+Need exact conversion opcodes. Let's recall: The conversion instructions in wasm (before SIMD) are:
+```
+i32.wrap_i64      0xa7
+i64.extend_i32_s  0xa8
+i64.extend_i32_u  0xa9
+i32.trunc_i64_s   0xaa
+i32.trunc_i64_u   0xab
+i64.extend_i32_s? ...
+f32.demote_f64    0xae? 
+```
+Not sure. Hmm.
+
+This is risky. Alternative: Avoid conversion instructions entirely! We can implement using only i32 arithmetic and handle INT_MIN by special-casing without i64 conversions? But we need abs for i32. Could do: if x < 0, then compute digits of (-x) using i32 carefully, handling INT_MIN specially.
+
+Alternative: Use only i32 instructions (which I'm more confident about?) Still need conversions? Maybe not. We can compute abs in i32 with branch: if x == INT_MIN, use special path (sum of digits of 2147483648 = 47). Else if x<0, x = -x. Then loop with i32. This avoids i64 conversions and i64 opcodes. But still need i32 division/modulo opcodes. I'm somewhat confident in i32.div_u/i32.rem_u (0x57/0x59). Need i32.const, i32.lt_s, i32.eq, i32.ne, i32.div_u, i32.rem_u, i32.add, i32.const 10, local.get/set, block/loop/if/br_if/br/end, i32.eqz maybe. These are within the i32 block I'm fairly confident about (0x41 const, 0x45 eqz, 0x48 lt_s, 0x53 add, 0x57 div_u, 0x59 rem_u). Need verify exact values.
+
+Could avoid even division/modulo by unrolling? Max 10 digits. Could use repeated subtraction to compute digits? That uses i32.sub, i32.const, comparisons; still needs i32.lt_s and i32.eq. Unrolling digits 10 times with comparisons is complex but avoids division. But we still need loops? Could unroll fully: For x in 0..2147483648, we can compute digit sum via repeated subtraction from powers of ten. That is 10 steps, each: if x >= 1e9 subtract and add 1 to digit count? But we need sum of digits, not just count. Unrolling digit extraction via repeated subtraction of powers of ten works: For place p = 1_000_000_000 down to 1: while x >= p { x -= p; sum +=1; } but that's a loop. Could unroll with nested if and subtraction? Complex.
+
+Better to use loop with i32 division/modulo. Need exact opcode values for i32.div_u and i32.rem_u. I think i32.div_u=0x57 and i32.rem_u=0x59. Let's verify by known: I recall `i32.div_s` opcode = 0x56, `i32.div_u`=0x57, `i32.rem_s`=0x58, `i32.rem_u`=0x59. This matches the sequence after mul=0x55. I'm fairly confident.
+
+Alternatively, avoid division entirely by using a different algorithm: Since abs value <= 2147483648 (10 digits), we can compute digit sum by checking each decimal place. But that needs division/modulo or repeated subtraction. Could do: use i32 arithmetic and loop with i32.div_u/rem_u; fine.
+
+Need handle negative and INT_MIN with i32 only. Let's design function using i32 only.
+
+Let x = param (i32). Compute n = abs(x) as i32, but INT_MIN special. Since abs(INT_MIN) = 2147483648 which exceeds i32 max (2147483647). So cannot store in i32. Could store as? We need sum only, not n. Approach: if x == INT_MIN, return 47. Else if x < 0, n = -x (i32) (safe because x != INT_MIN; -x for x in [-2147483647,-1] gives [1,2147483647], fits). Else n = x (0..2147483647). Then compute digit sum of n.
+
+Implementation:
+```
+local.get 0
+i32.const -2147483648   ; opcode i32.const with i32.const encoding. Need encode negative i32 constant.
+i32.eq
+if
+  i32.const 47
+  return? need return opcode. Avoid return; instead set sum=47 and break? Could set local sum=47 and skip loop. Use block with br_if.
+else
+  local.get 0
+  i32.const 0
+  i32.lt_s
+  if
+    local.get 0
+    i32.const 0
+    i32.sub   ; negate x (x<0, x != INT_MIN) => -x
+  else
+    local.get 0  ; keep x? Need stack discipline.
+  end
+  ; Now stack has n? Need manage.
+end
+```
+This is getting complex with if without else and stack discipline. Let's design more cleanly.
+
+Simpler: Use i32 only with branch:
+```
+local.get 0
+i32.const 0
+i32.lt_s
+if
+  ; x < 0 branch
+  local.get 0
+  i32.const -2147483648
+  i32.eq
+  if
+    ; x == INT_MIN
+    i32.const 47
+    local.set 1  ; result local (i32)
+    br $done? need label
+  else
+    local.get 0
+    i32.const 0
+    i32.sub
+    local.set 2? (n)
+    ; skip result set; need fall through to loop. Use br $loop? Need labels.
+  end
+else
+  ; x >= 0
+  local.get 0
+  local.set 2
+end
+```
+Messy with labels and stack. Better use i64 approach with conversions, if I can get conversion opcodes right. But uncertain.
+
+Alternative: handle INT_MIN by computing digit sum of 2147483648 via i32 by splitting into two parts? For INT_MIN, n=2147483648. We could handle by special-case constant result 47. Use control flow to set result and exit. We can use `br` to a label. Need know `br` opcode (0x06) and `return`? We can use `br` to exit to end of function. Pattern:
+```
+block $done
+  ... compute ...
+  br $done? 
+end
+```
+But we need final result on stack. Could use a local for result and then at end local.get result; end. Control flow: compute inside a block that sets result local; then after block, local.get result; end. We can `br` to after the block (label to end of block). That avoids `return` opcode. Good. We can use only `br`, `br_if`, `block`, `loop`, `if`, `else`, `end`, and numeric/local instructions. Great.
+
+Plan with i32 only:
+Locals: local 0 = param x (i32). Declare local 1 = i32 n (abs value, only valid for non-INT_MIN; for INT_MIN we set result directly), local 2 = i32 sum (digit sum). Maybe local 3 = i32 result? We can set local 2 = sum, then after block, local.get 2; end. For INT_MIN case, set local 2 = 47 and br to end block. For normal case, compute n and sum, leave local 2 = sum.
+
+Structure:
+```
+block $done
+  local.get 0
+  i32.const -2147483648   ; encode as i32 constant (signed). i32.const encoding: opcode 0x41 + LEB128 signed. Need encode -2147483648.
+  i32.eq
+  if
+    i32.const 47
+    local.set 2
+    br $done   ; exit block
+  end
+  ; now x != INT_MIN (stack empty)
+  local.get 0
+  i32.const 0
+  i32.lt_s
+  if
+    ; x<0: n = -x
+    local.get 0
+    i32.const 0
+    i32.sub
+    local.set 1
+  else
+    local.get 0
+    local.set 1
+  end
+  ; compute sum of n (local 1)
+  i32.const 0
+  local.set 2
+  loop $L
+    local.get 1
+    i32.const 0
+    i32.eq
+    br_if $done? no, need exit block to after. Use br_if $done? We are inside block $done and loop $L. Labels inside loop: loop depth0, block depth1. br_if 1 (block) exits block when n==0. Good.
+    local.get 1
+    i32.const 10
+    i32.rem_u
+    local.get 2
+    i32.add
+    local.set 2
+    local.get 1
+    i32.const 10
+    i32.div_u
+    local.set 1
+    br $L (br 0)
+  end
+end
+local.get 2
+end
+```
+Wait issue: after INT_MIN branch sets local 2=47 and `br $done` (br to block). Inside loop, `br_if $done` (label depth1) exits block when n==0. But after block, stack empty, then local.get 2, end. Good.
+
+But note: `br_if $done` inside loop: when n==0, branch to block label (depth 1). That jumps to end of block, skipping the body and the `br $L`, reaching after block. Good. If n !=0, execute body then `br $L` (depth 0) to loop top. Good.
+
+Now INT_MIN branch: `if` (no else) with instructions: i32.const 47; local.set 2; br $done; end. Need `else` opcode present. So: if opcode, blocktype 0x40, i32.const 47, local.set 2, br 1, else, end. Since no else instructions, else opcode immediately followed by end. Valid? if blocktype instr* else instr* end. instr* before else = 3 instructions; after else = empty. Good.
+
+Then after if, x != INT_MIN. Then x<0 branch: if (no else) for x<0: instructions local.get 0; i32.const 0; i32.sub; local.set 1; end. Else branch: need set n=x. Use `else` with instructions local.get 0; local.set 1; end. So:
+```
+local.get 0
+i32.const 0
+i32.lt_s
+if
+  local.get 0
+  i32.const 0
+  i32.sub
+  local.set 1
+else
+  local.get 0
+  local.set 1
+end
+```
+Valid. But careful: `i32.sub` computes 0 - x? We need n = -x. Stack: local.get 0 (x), i32.const 0 (0), i32.sub -> 0 - x = -x. Good. But if x is INT_MIN we already handled. For x in [-2147483647,-1], 0 - x = positive, fits i32. Good.
+
+Then sum loop. local.get 1 (n). We need local 2 sum init 0 before loop. Good.
+
+Check loop exit: when n==0, br_if to block label (depth 1). But wait: the block label index at that point: we are inside `loop` (label 0 = loop, label 1 = block). Actually label depth: innermost is loop (0), then block (1). `br_if 1` branches to block end (depth1). Good. `br 0` branches to loop start. Good.
+
+At end of block (after loop end), the stack must be empty. The block's type is void (0x40). The loop's type is void (0x40). Good. `br_if 1` when n==0: at that point stack is empty? We did local.get 1 (push n), i32.const 0 (push 0), i32.eq (pop two, push i32 cond). br_if consumes cond (top). If cond true, branch to block end; stack after br_if? br_if with no else? Wait br_if (0x07) is not if; it consumes the condition and branches. It does not have a blocktype. So after br_if, if branch taken, we jump to block end; stack at block end must match block type (void). The stack before br_if had cond (1 value). br_if pops cond, leaving empty stack; then branch. Good. If branch not taken, stack is empty (cond popped) and we continue with body. Body pushes local.get 1 etc. Good.
+
+Body: local.get 1 (push n), i32.const 10 (push 10), i32.rem_u (pop 10 and n? Need order: i32.rem_u pops two operands: a, b; result a % b. Stack order: ... n, 10 -> pop 10 (b), pop n (a), push n%10. Good.) Then local.get 2 (push sum), i32.add (pop sum and rem? Wait stack: rem (bottom), sum (top). i32.add pops sum (b) and rem (a) -> a+b = rem+sum. Good.) local.set 2 (pop sum, set local). Then local.get 1 (push n), i32.const 10 (push 10), i32.div_u (pop 10 and n -> n/10), local.set 1. Then br 0. Stack empty. Good.
+
+After block: local.get 2; end. The function result is i32 (local 2). Good.
+
+Need ensure local 2 is i32 type. Declare locals: local 1 i32, local 2 i32. Locals vec: count u32=1; entry count u32=2; type byte 0x7f (i32). That declares local 1 and local 2 both i32. Good.
+
+Now encode i32.const negative constant -2147483648. i32.const opcode 0x41 followed by signed LEB128 of the i32 value. Need encode -2147483648 as signed LEB128. Signed LEB128: for negative numbers, encode two's complement. -2147483648 in i32 = 0x80000000. Signed LEB128 encoding: we encode the 32-bit signed value. Formula: value = -2147483648. LEB128 signed: bytes with sign bit 7 set except last. Let's compute.
+
+Signed LEB128 encoding algorithm:
+```
+fn signed_leb128(value: i32) -> Vec<u8>:
+  result = []
+  more = true
+  while more:
+    byte = value & 0x7f
+    value >>= 7  (arithmetic shift, i32)
+    if (value == 0 && (byte & 0x40) == 0) || (value == -1 && (byte & 0x40) != 0):
+      more = false
+    else:
+      byte |= 0x80
+    result.push(byte)
+```
+Need be careful with i32 arithmetic shift in this mental calc. Let's do carefully.
+
+value = -2147483648.
+Iteration 1:
+byte = value & 0x7f. In two's complement, -2147483648 = 0x80000000. Low 7 bits: 0x00 (since 0x80000000 & 0x7f = 0). byte = 0x00.
+value >>= 7 arithmetic: -2147483648 / 128 (floor) = -16777216? Let's compute: 2147483648 /128 = 16777216 exactly? 128*16777216 = 2147483648 (128*16,777,216 = 2,147,483,648). Yes exactly. Negative: -2147483648 >>7 = -16777216 (since divisible). value = -16777216.
+Check loop condition: value == -1? No. value ==0? No. more=true, byte |=0x80 -> 0x80. push 0x80.
+Iteration 2:
+byte = value & 0x7f. value=-16777216 = 0xFF000000? Let's compute: 16777216 = 0x01000000. Negative = 0xFF000000 (two's complement 32-bit). Low 7 bits = 0x00. byte=0x00.
+value >>=7: -16777216 /128 = -131072 (since 128*131072=16777216). value=-131072.
+Condition: value !=0, !=-1. more=true. byte=0x80. push 0x80.
+Iteration 3:
+value=-131072 = 0xFFFE0000? 131072=0x00020000. negative = 0xFFFE0000. Low 7 bits = 0x00. byte=0x00.
+value >>=7: -131072/128 = -1024. value=-1024.
+more=true (not 0/-1). byte=0x80. push 0x80.
+Iteration 4:
+value=-1024 = 0xFFFFFC00. Low 7 bits = 0x00? 0xFFFFFC00 & 0x7f = 0x00 (since 0xC00 low 7 bits =0). byte=0x00.
+value >>=7: -1024/128 = -8. value=-8.
+more=true (not 0/-1). byte=0x80. push 0x80.
+Iteration 5:
+value=-8 = 0xFFFFFFF8. Low 7 bits: 0xF8 &0x7f = 0x78? Wait 0xFFFFFFF8 low 7 bits: 0xF8 = 11111000; low 7 bits = 1111000 = 0x78? Let's compute: 0xF8 = 11111000 binary. Mask 0x7f = 01111111. 11111000 & 01111111 = 01111000 = 0x78. byte=0x78.
+value >>=7: -8 /128 = ? arithmetic shift of -8 by 7: -8 >> 7. In binary, -8 = ...11111000. Shift right by 7 (arithmetic) => ...11111111? Let's compute numerically: floor(-8/128) = -1 (since -8/128 = -0.0625, floor = -1). So value = -1.
+Check loop condition after computing byte and value: byte & 0x40? byte=0x78, bit6 (0x40) = 1 (0x78 = 01111000, bit6 =1? 0x78 = 64+8+4+2 =? binary 0111 1000: bit6 (0x40) =1? Let's list bits: 0x78 = 0b01111000. bit0=0,bit1=0,bit2=0,bit3=0,bit4=1,bit5=1,bit6=1,bit7=0. Yes bit6 (0x40)=1. value==-1 and (byte &0x40)!=0 -> more=false. So push byte WITHOUT setting 0x80? In algorithm, if condition met, more=false and byte remains 0x78 (not |=0x80). push 0x78. Done.
+
+So signed LEB128 for -2147483648 = 80 80 80 80 78? Wait we pushed iteration1 0x80, iter2 0x80, iter3 0x80, iter4 0x80, iter5 0x78. So bytes: 80 80 80 80 78. Let's verify by decoding. Decode: 
+byte0=0x80: low7=0, more=1 -> value =0.
+byte1=0x80: low7=0, more=1 -> value = 0 | (0 <<7) =0? Actually signed LEB128 decode: value =0; shift=0; loop: byte=next; value |= (byte &0x7f) << shift; shift +=7; if (byte &0x80)==0 break; else shift? Standard decode: 
+```
+value = 0; shift=0;
+loop {
+  byte = next;
+  value |= (byte & 0x7f) << shift;
+  if (byte & 0x80) { shift +=7; continue; } else break;
+}
+if (shift < 32 && (byte & 0x40)) value |= -1 << shift;  // sign extend
+```
+For bytes 80 80 80 80 78:
+byte0=0x80: value |= 0<<0 =0; shift=7; continue.
+byte1=0x80: value |=0<<7=0; shift=14; continue.
+byte2=0x80: value |=0<<14=0; shift=21; continue.
+byte3=0x80: value |=0<<21=0; shift=28; continue.
+byte4=0x78: value |= (0x78 &0x7f)<<28 = 0x78 <<28? 0x78=120; 120<<28 = 120 * 268435456 = 32,157,... but this is as unsigned; need sign. byte4 &0x80 =0 -> break. byte4 &0x40 = 0x40 !=0 (sign bit), and shift=28 <32, so sign extend: value |= -1 <<28 (as signed 32-bit). 120<<28 = 120*2^28. 2^28=268435456; *120 = 32,212,? compute: 268,435,456*100=26,843,545,600; *20=5,368,709,120; sum=32,212,254,720. value=32,212,254,720. Sign extend: value |= -1 <<28. In 32-bit signed, -1<<28 = 0xF0000000? Let's compute 0xF0000000 as signed = -? 0xF0000000 = 0b1111_0000_0000_0000_0000_0000_0000_0000 = negative (sign bit set) = -(0x10000000) = -268435456? Wait 0xF0000000 = 0xFFFFFFFF - 0x0FFFFFFF? Let's just do: value |= (0xF0000000). value=32,212,254,720 decimal. 32,212,254,720 in hex? Let's convert: 32,212,254,720 / 268,435,456 = 120? 268,435,456*120 = 32,212,254,720 exactly (yes). So value = 120 << 28 = 0x78000000? Let's see 120<<28 = 120*2^28. 120 in hex =0x78. 0x78 <<28 = 0x78 *0x10000000 = 0x780000000? That's too big (64-bit). Wait, in LEB128 decode, value is stored as 64-bit? But for i32.const, we decode into i32 (sign-extend). Let's not get lost. The known encoding for -2147483648 is probably `80 80 80 80 78`? Let's verify by known examples: i32.const -1 encodes as 0x7f? Actually signed LEB128 for -1 = 0x7f. For -2 = 0xfe? Let's check: -2 in i32 = 0xFFFFFFFE. LEB128 signed: byte = value &0x7f = 0xFE &0x7f =0x7E? Wait -2 = 0xFFFFFFFE. low 7 bits = 0xFE &0x7F = 0x7E. byte=0x7E. value >>=7: -2>>7 = -1 (floor -0.015625 = -1). condition: value==-1 and (byte &0x40)!=0 (0x7E bit6=1) -> more=false. byte stays 0x7E. So -2 encodes as 0x7e. Good. For -128? -128 = 0xFFFFFF80. low7 =0x00? 0x80 &0x7f =0. byte=0. value >>=7: -128>>7 = -1 (floor -1). condition value==-1 and (byte &0x40)==0 (byte=0, bit6=0) -> not both; more=true. byte=0x80. push 0x80. iter2: byte = value &0x7f = -1 &0x7f = 0x7f. value >>=7: -1>>7 = -1 (arithmetic). condition value==-1 and (byte&0x40)!=0 (0x7f bit6=1) -> more=false. push 0x7f. So -128 encodes as 80 7f. Decode: byte0=0x80 value=0 shift=7; byte1=0x7f value |=0x7f<<7 =0x3f8? Wait 0x7f<<7 = 0x7f*128 = 0x3f8? 0x7f=127, *128=16256=0x3F80? Let's compute: 127*128 = 16256 = 0x3F80. Hmm value =0x3F80? That doesn't look like -128. Something wrong in decode algorithm. Let's redo LEB128 decode correctly.
+
+Standard unsigned LEB128 decode:
+```
+value=0; shift=0;
+loop {
+  byte=next;
+  value |= (byte & 0x7f) << shift;
+  if (!(byte &0x80)) break;
+  shift +=7;
+}
+```
+For signed LEB128, after loop, if shift < bits && (byte &0x40) !=0, then sign extend: value |= -1 << shift (as unsigned, then interpret). For -128 encoded as 80 7f:
+byte0=0x80: value |=0<<0=0; shift=7 (since more). byte1=0x7f: value |=0x7f<<7. 0x7f=127; 127<<7 = 127*128 = 16256 = 0x3F80? Let's compute 0x7f <<7: 0x7f = 127 decimal; <<7 = *128 = 16256 decimal; hex 0x3F80? 0x3F80 = 16256? 0x3F80 = 3*4096 +15*256 +8*16 +0 =12288+3840+128=16256 yes. byte1&0x80 =0 (0x7f<0x80), break. byte1&0x40 = 0x40 (0x7f bit6=1). shift=14 <32. sign extend: value |= -1 <<14. In 32-bit unsigned, -1<<14 = 0xFFFC0000? Wait 0x7f<<7 = 0x3F80. OR with (-1<<14) = 0x3F80 | 0xFFFC0000. 0x3F80 = 0x00003F80. OR = 0xFFFF3F80? Let's compute: 0xFFFC0000 | 0x00003F80 = 0xFFFF3F80? 0xFFFC0000 has bits: 0xFFFC0000 = 11111111 11111100 00000000 00000000. 0x00003F80 = 00000000 00000000 00111111 10000000. OR = 11111111 11111100 00111111 10000000 = 0xFFFC3F80? Let's carefully: 
+0xFFFC0000: bytes: FF FC 00 00.
+0x00003F80: bytes: 00 00 3F 80.
+OR bytes: FF |00=FF; FC|00=FC; 00|3F=3F; 00|80=80 => 0xFFFC3F80. That's not -128. Something is wrong. So my LEB128 encoding or decode is off. Let's redo.
+
+Actually signed LEB128 encoding for -128: I recall -128 might encode as `80 7f`? Let's decode `80 7f` via the correct signed decode algorithm. Hmm.
+
+Let's recall the correct signed LEB128 decode algorithm from spec:
+```
+fn signed_leb128_decode(bytes):
+  value = 0; shift = 0
+  loop:
+    byte = bytes.pop_front()
+    value |= (byte & 0x7f) << shift
+    if (byte & 0x80) == 0: break
+    shift += 7
+  if (shift < 32 && (byte & 0x40) != 0):
+    value |= -1 << shift
+  return value (as signed)
+```
+Wait the sign extension uses the *last* byte's 0x40 bit, and shifts by `shift` (the shift after the last byte?). For bytes 80 7f:
+byte0=0x80: value |=0<<0=0; byte&0x80 -> shift +=7 (shift=7); continue.
+byte1=0x7f: value |=0x7f<<7 = 16256; byte&0x80 ==0 -> break. Last byte=0x7f; byte&0x40 =0x40 !=0; shift=14? Wait after byte0, shift=7; after byte1, we don't add shift because byte1 has no more bit; shift remains 7? Actually in loop, we do `shift +=7` only when more bit set. For byte0 (more set), after processing, shift becomes 7. For byte1 (more not set), we break before shift +=7, so shift remains 7? Let's re-evaluate: In my earlier algorithm I set shift=14 incorrectly. Correct: shift after byte0 = 7. After byte1, we break; shift =7 (not 14). Then sign extension: shift=7 <32 and byte1&0x40 =0x40 !=0 -> value |= -1 <<7. value =16256 | (-1<<7). -1<<7 in 32-bit = 0xFFFFFF80 (since 0x7F<<7? hmm). Let's compute -1<<7 = (0xFFFFFFFF <<7) &0xFFFFFFFF. 0xFFFFFFFF<<7 = 0x7FFFFFF80? That's 33 bits; mask 32-bit: 0xFFFFFF80? Let's compute: 0xFFFFFFFF << 7: binary ...11111111 <<7 = ...11111110000000000? Mask to 32 bits: low 32 bits of (0xFFFFFFFF <<7). 0xFFFFFFFF<<7 = 0x7FFFFFFF80? Actually 0xFFFFFFFF *128 = 0x7FFFFFFF80? Let's do: 0xFFFFFFFF = 4294967295. *128 = 549755813,760? That's 0x7FFFFFFF80? 0x7FFFFFFF80 = 549755813,760? 0x7FFFFFFF80 = 0x7FFFFFFF *16 + 0x80? Eh. Mask to 32 bits: 0x7FFFFFFF80 & 0xFFFFFFFF = 0xFFFFFF80? Since 0x7FFFFFFF80 low 32 bits: 0x7FFFFFFF80 = binary 0111...1111 1000 0000? Let's just compute value OR.
+
+value=16256 = 0x3F80. -1<<7 (32-bit) = 0xFFFFFF80? Let's verify: -1<<7 = -128. As 32-bit two's complement, -128 = 0xFFFFFF80. Yes! Because -128 = 0xFFFFFF80 (since 0x100 =256; -256 =0xFFFFFF00; -128 =0xFFFFFF80). Yes. value = 0x3F80 | 0xFFFFFF80 = 0xFFFFFF80? 0x3F80 = 0x00003F80. OR with 0xFFFFFF80: low bytes 0x3F80 | 0xFF80 = 0xFF80? Let's bytes: 0xFFFFFF80 = FF FF FF 80. 0x00003F80 = 00 00 3F 80. OR: FF|00=FF; FF|00=FF; FF|3F = FF? FF|3F = FF (since FF has all bits) = FF; 80|80 =80. Result = FF FF FF 80 = 0xFFFFFF80 = -128. Correct! Good. So signed LEB128 decode works; my earlier sign extension used wrong shift. Fine.
+
+Now back to encoding -2147483648 = 0x80000000. Let's redo encoding carefully with correct algorithm.
+
+Encoding algorithm (signed LEB128):
+```
+result=[]
+while True:
+  byte = value & 0x7f
+  value >>= 7  (arithmetic)
+  if (value == 0 && (byte & 0x40) == 0) || (value == -1 && (byte & 0x40) != 0):
+    result.append(byte); break
+  else:
+    result.append(byte | 0x80)
+```
+Let's recompute with correct arithmetic shifts.
+
+value0 = -2147483648 (0x80000000).
+iter1: byte = value &0x7f = 0x00 (low7 bits of 0x80000000 =0). value >>=7 arithmetic: -2147483648 /128 = -16777216 (exact). condition: value==0? no. value==-1? no. -> push byte|0x80 =0x80. value=-16777216.
+iter2: byte = value &0x7f. value=-16777216. In 32-bit, -16777216 = 0xFF000000? Let's verify: 16777216 = 0x01000000. Two's complement negative: ~0x01000000 +1 = 0xFEFFFFFF +1 = 0xFF000000. Yes. low7 bits of 0xFF000000 = 0x00. byte=0x00. value >>=7: -16777216/128 = -131072 (exact, since 16777216/128=131072). condition: value==0? no. ==-1? no. push 0x80. value=-131072.
+iter3: byte = value &0x7f. -131072 = 0xFFFE0000? 131072=0x00020000. negative = ~0x00020000+1 = 0xFFFEFFFF+1 = 0xFFFF0000? Wait recalc: 0x00020000 (131072). ~0x00020000 = 0xFFFEFFFF (invert bits). +1 = 0xFFFF0000? 0xFFFEFFFF+1 = 0xFFFF0000. Yes (0xFFFEFFFF +1 = 0xFFFF0000). low7 bits of 0xFFFF0000 = 0x00. byte=0x00. value >>=7: -131072/128 = -1024 (exact). condition no. push 0x80. value=-1024.
+iter4: byte = value &0x7f. -1024 = 0xFFFFFC00? 1024=0x00000400. negative = ~0x00000400+1 = 0xFFFFFBFF+1 = 0xFFFFFC00. low7 bits =0x00 (0xFC00 low7 =0? 0xFC00 &0x7f: 0xFC00 = 1111110000000000; low7 = 0000000 =0). byte=0x00. value >>=7: -1024/128 = -8 (exact). condition: value==0? no; ==-1? no. push 0x80. value=-8.
+iter5: byte = value &0x7f. -8 = 0xFFFFFFF8. low7 bits: 0xF8 &0x7f = 0x78 (as computed). byte=0x78. value >>=7: -8/128 = -1 (floor). condition: value==-1 (yes) and (byte &0x40)!=0 (0x78 bit6 =1, yes) -> push byte (0x78) and break.
+Result bytes: 80 80 80 80 78. Decode to check:
+byte0=0x80: value |=0<<0=0; shift=7; continue.
+byte1=0x80: value |=0<<7=0; shift=14; continue.
+byte2=0x80: value |=0<<14=0; shift=21; continue.
+byte3=0x80: value |=0<<21=0; shift=28; continue.
+byte4=0x78: value |=0x78<<28. 0x78=120; 120<<28 = 120 * 268435456 = 32,212,254,720. But wait, for i32 we only need low 32 bits; 120<<28 exceeds 32 bits? 120<<28 = 0x78 <<28. 0x78 = 120 (0b01111000). <<28 = 0b01111000_00000000_00000000_00000000_00000000_00000000_00000000_00000000? That's way more than 32 bits. Something wrong: shifting by 28 with value 120 (0x78) yields bits up to bit 34? 0x78 has bit6 set; 6+28=34, exceeding 32 bits. That can't be right for an i32. I must have mis-shifted. Let's recompute: In LEB128, each byte contributes 7 bits, so byte4 (the 5th byte, index 4) should contribute bits 28..34 (7 bits) — but for i32 we only need bits 0..31. The sign bit (0x40) of the last byte indicates sign; the actual data bits from last byte are bits 28..32? That's 5 bits (28,29,30,31,32)? Hmm.
+
+Wait, for i32 (32-bit), the last byte can have bits at positions shift..shift+6 where shift=28. That's bits 28..34 (7 bits), but i32 only has bits 0..31. The extra bits beyond 31 are ignored? Actually signed LEB128 for i32: the last byte's data bits fill positions 28..34? No. Let's recall: For i32.const, the constant is encoded as a signed LEB128 in the range [-2^31, 2^31). The encoding should be minimal? The spec uses `i32.const` with `signedLEB128` encoding the 32-bit value. The encoding of -2147483648 (0x80000000) should be 5 bytes? Let's check via a reliable source mentally: I recall i32.const -1 encodes as 0x7f (1 byte). -2 as 0xfe? Wait earlier I computed -2 = 0x7e. Let's verify by known: i32.const -1 in wasm is bytes `41 7f`? I think yes. i32.const 1 = `41 01`. i32.const -1 = `41 7f`. i32.const -2 = `41 fe`? Hmm. Let's check with signed LEB128 decode for `7f`: byte0=0x7f: value |=0x7f<<0 =127; byte&0x80 ==0 -> break. last byte 0x7f &0x40 =0x40 !=0; shift=0 <32; value |= -1<<0 = value | 0xFFFFFFFF = 127 | 0xFFFFFFFF = 0xFFFFFF7F? That's not -1. Something is very wrong with my decode/sign extension.
+
+Let's re-derive signed LEB128 decode properly. I think the correct sign extension: after decoding, if the high bit of the last byte (0x40) is set, then value is negative: value |= (-1) << (number_of_bits_encoded). But the number of bits encoded is shift (total bits from all bytes) = 7*num_bytes? For one byte, total bits =7, but i32 value -1 needs sign bit at bit31? That can't be.
+
+I'm clearly misremembering. Let's recall the actual signed LEB128 algorithm precisely.
+
+Unsigned LEB128:
+- Each byte contributes 7 bits (lower 7 bits), MSB indicates continuation.
+- Decode: value =0; shift=0; repeat { byte=next; value |= (byte &0x7f) << shift; shift +=7; } while (byte &0x80).
+- After loop, value is the unsigned value.
+
+Signed LEB128:
+- Encoded such that the value is sign-extended to 32 (or 64) bits. Specifically, the sign bit is the 6th bit (0x40) of the last byte. The encoding is:
+```
+fn encode_signed(value):
+  bytes=[]
+  more=true
+  while more:
+    byte = value & 0x7f
+    value >>= 7  (arithmetic shift)
+    if (value == 0 && (byte &0x40)==0) || (value == -1 && (byte &0x40)!=0):
+      more=false
+    else:
+      byte |= 0x80
+    bytes.append(byte)
+  return bytes
+```
+This is what I used. For -1: value=-1. iter1: byte = -1 &0x7f. In two's complement, -1 = 0xFFFFFFFF; &0x7f = 0x7f. value >>=7: -1 >>7 (arithmetic) = -1 (since -1 is all ones, arithmetic shift right gives -1). condition: value==-1 (yes) and (byte &0x40)!=0 (0x7f bit6=1) -> more=false. push byte (0x7f). Result [0x7f]. Decode: byte0=0x7f: value |=0x7f<<0 =127; byte&0x80 ==0 -> break. After loop, if (byte &0x40) !=0, sign extend: value = (value | (0x7f << shift?)) ... hmm.
+
+The decode algorithm for signed LEB128:
+```
+fn decode_signed(bytes):
+  value=0; shift=0
+  loop:
+    byte=next
+    value |= (byte &0x7f) << shift
+    if (byte &0x80)==0: break
+    shift +=7
+  if (shift < bits && (byte &0x40) !=0):
+    value |= -1 << shift
+  return value
+```
+For [0x7f]: byte=0x7f: value |=0x7f<<0 =127; byte&0x80==0 -> break. shift =0 (we never did shift +=7 because byte has no more bit). Wait in the loop, we do `shift +=7` only if byte&0x80 set. For [0x7f], after processing byte (more not set), we break; shift remains 0. Then check byte&0x40 !=0 (0x7f bit6=1) and shift=0 <32: value |= -1 <<0 = value | 0xFFFFFFFF. value=127 | 0xFFFFFFFF = 0xFFFFFF7F? That's not -1. So decode algorithm as I wrote is wrong.
+
+I must be mis-remembering sign extension. Let's recall correct signed LEB128 decode: It's the same as unsigned, but then if the sign bit of the last byte (0x40) is set, the value is negative by sign-extending from the *last byte's* 7-bit field, not from shift. Actually the trick: after decoding unsigned value and tracking shift, if sign bit set, then value = value - (1 << total_bits_used)? Let's think.
+
+For -1 encoded as [0x7f]: unsigned decode gives 127. We want -1. The sign bit (0x40) is set; the total bits used = 7 (one byte). The sign extension means the value is negative: value = 127 - (1 << 7) = 127 -128 = -1. Yes! That's the correct rule: if sign bit set, value = unsigned_value - (1 << (shift_total)), where shift_total = 7 * num_bytes (number of bits consumed). For [0x7f], shift_total =7, value=127 -128 = -1. Good. For [0x80,0x7f] (-128): unsigned decode: byte0=0x80: value |=0<<0=0; shift=7; byte1=0x7f: value |=0x7f<<7 =127*128 =16256; shift=14? Wait after byte1 (no more), break; shift remains 7? But total bits used = 14 (two bytes). Need sign extension: value = 16256 - (1 << 14) = 16256 -16384 = -128. Correct! Good. So the rule: total_bits = 7 * num_bytes_decoded (or shift after loop? Actually after loop, shift = 7 * num_bytes_with_more_bit? No. Let's define shift_total = 7 * number_of_bytes. For [0x80,0x7f], num_bytes=2, total=14; value=16256 - 16384 = -128. Correct. For [0x80,0x80,0x80,0x80,0x78], num_bytes=5, total=35 bits. unsigned decode: value = 0x78 <<28? Wait byte4 contributes 0x78 <<28 (since shift before byte4 = 28). But 0x78 <<28 in a 64-bit arithmetic = 120 * 2^28 = 32,212,254,720. But for i32 we only care about low 32 bits? In LEB128 decode, value is computed as an unsigned 64-bit? Actually the spec decodes signed LEB128 into an i32/i64 with sign extension. The algorithm: 
+```
+value = 0
+shift = 0
+loop:
+  byte = next
+  value |= (byte &0x7f) << shift
+  if (byte &0x80)==0 break
+  shift +=7
+if (shift < bits && (byte &0x40) !=0):
+  value -= 1 << (7 * num_bytes) ??? 
+```
+Hmm.
+
+Let's recall exact spec algorithm for `signedLEB128` decoding (from the wasm spec):
+```
+fn decode_signed(bytes):
+  value = 0
+  shift = 0
+  loop:
+    byte = next_byte()
+    value |= (byte & 0x7f) << shift
+    if (byte & 0x80) == 0: break
+    shift += 7
+  if (shift < 32 && (byte & 0x40) != 0):
+    value |= (-1 << shift)
+  return value
+```
+Wait this is the algorithm I first used (shift is bits consumed before the last byte? Actually shift after processing byte with more set is 7*index? Let's simulate [0x80,0x80,0x80,0x80,0x78]:
+byte0=0x80: value |=0<<0=0; more set -> shift=7; continue.
+byte1=0x80: value |=0<<7=0; shift=14; continue.
+byte2=0x80: value |=0<<14=0; shift=21; continue.
+byte3=0x80: value |=0<<21=0; shift=28; continue.
+byte4=0x78: value |=0x78<<28. But 0x78<<28 exceeds 32 bits. However in spec, value is an i32? They may use `i32` arithmetic? Hmm. If value is i32, 0x78<<28 in i32 (with wrapping?) = 0x78 <<28 = 0x78000000? Let's compute 0x78<<28: 0x78 = 0b01111000. <<28: bits 6..0 of 0x78 shift to bits 34..28. In 32-bit wrapping, only bits 28..31 survive: bit6 -> bit? 0x78 = bits 3,4,5,6? Let's recompute 0x78 = 0b01111000. Bits: bit3 (0x08), bit4 (0x10), bit5 (0x20), bit6 (0x40) are set. (0x78 = 64+8+4+2 =78? 64+8=72,+4=76,+2=78 yes; binary: bit6=1 (64), bit3=1(8), bit2=1(4), bit1=1(2) => 64+8+4+2=78. Wait that's bits 6,3,2,1. Let's list: 78 = 64+14 = bit6 (64) + bit3(8)+bit2(4)+bit1(2) =64+8+4+2=78. Yes bits: bit6, bit3, bit2, bit1. Not bit4. Let's check 0x78 = 0b01111000: bits from MSB: 0 1 1 1 1 0 0 0. bit7=0, bit6=1, bit5=1, bit4=1, bit3=1, bit2=0, bit1=0, bit0=0. That gives bit6(64)+bit5(32)+bit4(16)+bit3(8) =120? 64+32+16+8 =120. But 0x78 = 120, not 78! I made a numeric error earlier. 0x78 = 120 (since 0x70=112, +0x08=120). Yes 0x78=120. Good. Bits set: 64,32,16,8 =120. So bits 6,5,4,3. I mistakenly said bit1,2,3. Correct: bits 3,4,5,6.
+
+Now 0x78 <<28: bit3 -> bit31, bit4 -> bit32 (overflow), bit5 -> bit33, bit6 -> bit34. In 32-bit wrapping (mask 0xFFFFFFFF), only bit3 -> bit31 survives. 0x78<<28 (masked to 32 bits) = (0x78 <<28) &0xFFFFFFFF. 0x78 <<28: Let's compute: 0x78 = 0x78. 0x78 << 28 = 0x78 * 0x10000000 (2^28 = 0x10000000). 0x78 *0x10000000 = 0x780000000? That's 33+ bits. Mask 32-bit: take low 32 bits of 0x780000000. 0x780000000 in hex: 0x7_8000_0000? Let's write: 0x78 * 0x10000000 = (0x78) << 28. 0x78 = 120. 120*2^28 = 120*268435456 = 32,212,254,720. Hex: 32,212,254,720 / 2^28 =120, and the value = 0x780000000? Let's convert 32,212,254,720 to hex: 32,212,254,720 = 0x7800_00000? That's 0x78 followed by? 0x78 <<28 = 0x78 * 0x10000000 = 0x780000000 (that's 0x78 with 7 zeros? 0x78 * 0x10000000 = 0x78_0000000? Let's count zeros: 0x10000000 is 1 followed by 7 zeros? 0x10000000 = 268,435,456 = 1 * 16^7? 16^7 = 268,435,456. Yes 0x10000000 = 1 followed by 7 zeros in hex (since 0x1_0000000 = 1 * 16^7). So 0x78 *0x10000000 = 0x78_0000000? That's 0x78 followed by 7 hex zeros = 0x780000000? Let's count: 0x78 (2 hex digits) + 7 zeros = 9 hex digits: 0x780000000 (that's 9 hex digits: 7,8,0,0,0,0,0,0,0). Yes 0x780000000. Low 32 bits of 0x780000000: keep last 8 hex digits: 0x00000000? 0x780000000 = 0x7 8 0 0 0 0 0 0 0 (9 digits). Last 8 digits = 8 0 0 0 0 0 0 0? Wait last 8 hex digits of "780000000" (9 digits) = "80000000"? Let's count the string "780000000": chars: 7(1)8(2)0(3)0(4)0(5)0(6)0(7)0(8)0(9). Last 8 = chars 2..9 = "80000000"? That's 8 chars: 8,0,0,0,0,0,0,0 = 0x80000000. Yes low 32 bits = 0x80000000 = -2147483648. Then sign extension: last byte 0x78 has bit6 (0x40) set; shift after byte4? In the loop, for byte4 (more not set) we break before shift +=7; shift =28 (set by byte3). Wait we need to recompute shift: byte0 (more) -> shift=7; byte1 (more) -> shift=14; byte2 (more) -> shift=21; byte3 (more) -> shift=28; byte4 (no more) -> break with shift=28. Then check byte4 &0x40 = 0x40 !=0 and shift=28 <32: value |= -1 <<28. -1<<28 in 32-bit = 0xF0000000? Let's compute: -1 <<28 = (0xFFFFFFFF <<28) &0xFFFFFFFF. 0xFFFFFFFF<<28: bits 0..31 shifted left 28 -> only bits 0..3 (0xF) survive? 0xFFFFFFFF<<28 = (0xFFFFFFFF * 2^28) &0xFFFFFFFF. Easier: -1<<28 = -2^28 = -268435456 = 0xF0000000? Since 2^28 =0x10000000. -0x10000000 in 32-bit = 0x10000000 inverted +1: ~0x10000000 = 0xFEFFFFFF; +1 =0xFF000000? Wait that's for 2^28? Let's compute: 2^28 = 0x10000000 (256,000,000? Actually 2^28 = 268,435,456 = 0x10000000). -2^28 = ~(2^28)+1 = ~0x10000000 +1. ~0x10000000 = 0xFEFFFFFF. +1 = 0xFF000000. So -2^28 = 0xFF000000, not 0xF0000000. Let's verify: 2^31 = 0x80000000. 2^28 = 0x10000000. -2^28 = -0x10000000 = 0x10000000 * (-1). In two's complement: -0x10000000 = ~0x10000000 +1. ~0x10000000: 0x10000000 = 0001 0000 0000 0000 0000 0000 0000 0000 (bit28 set). Invert all bits: 1110 1111 1111 1111 1111 1111 1111 1111 = 0xEF? Wait 0x10000000 = 0001 0000 0000 0000 0000 0000 0000 0000. Invert = 1110 1111 1111 1111 1111 1111 1111 1111 = 0xEFFF? Let's compute: 0x10000000 in binary: bit28 set. ~0x10000000 = 0xFFFFFFFF - 0x10000000 = 0xFEFFFFFF. +1 = 0xFF000000. Yes -2^28 = 0xFF000000. Good.
+
+value = 0x80000000 | 0xFF000000 = 0xFF800000? OR: 0x80000000 (1000 0000 0000 0000 0000 0000 0000 0000) | 0xFF000000 (1111 1111 0000 0000 0000 0000 0000 0000) = 1111 1111 0000 0000 0000 0000 0000 0000 = 0xFF000000? Wait OR: bit31: 1|1=1; bit30: 0|1=1; bit29:0|1=1; bit28:0|1=1; bit27..0: 0|0=0. So = 0xFF000000. That's not -2147483648. Hmm. Something still wrong.
+
+I'm clearly messing up. Let's step back and recall the correct signed LEB128 encoding/decoding. This is important for the i32.const -2147483648. But maybe I can avoid i32.const negative constant entirely! Instead of comparing x == INT_MIN via a negative constant, compare x < 0 via i32.lt_s with 0 (nonnegative). Then in the x<0 branch, handle INT_MIN by checking if x == -2147483648? Still needs negative constant. Alternatively, handle INT_MIN by noting: for x<0, the magnitude m = -x is in [1, 2147483648]. We can compute sum of digits of m without materializing m as i32. Instead, compute digit sum of the magnitude using i32 arithmetic on x carefully? For INT_MIN, magnitude =2147483648, which is not representable in i32, but its digit sum (47) can be handled by a special case. To special-case, we need to detect INT_MIN. We can detect INT_MIN without a negative constant by checking: x < 0 AND x == 0x80000000. But we can detect INT_MIN as (x < 0) AND (-x == 0)? No, -INT_MIN in i32 = 0 (overflow) — actually i32.sub 0 - (-2147483648) = 0 (wrapping). So if x<0 and (0 - x) == 0, then x == INT_MIN. That uses only i32.sub and i32.eq with 0. Nice! Because i32.sub wraps. So:
+
+x<0 branch: compute neg = 0 - x (i32). If neg == 0, then x == INT_MIN; result =47. Else n = neg; loop compute sum.
+This avoids negative constants! Great.
+
+Also, for x>=0, n = x (no negation). Good. So we never need i32.const negative. We only need nonnegative constants: 0, 1?, 10, 47. i32.const 0, 10, 47 (positive). Signed LEB128 for positive values: just encode unsigned (since nonnegative, signed LEB128 of positive = unsigned LEB128). 0 -> 0x00; 10 -> 0x0a; 47 -> 0x2f. Easy.
+
+Let's redesign function with this.
+
+Locals: local 1 = i32 n (magnitude), local 2 = i32 sum. (local 0 = param x.)
+
+Body:
+```
+local.get 0
+i32.const 0
+i32.lt_s
+if
+  ; x < 0
+  local.get 0
+  i32.const 0
+  i32.sub
+  ; stack: neg = -x (wrapping). If x == INT_MIN, neg == 0.
+  i32.eq? Need compare neg to 0. But stack currently has neg (single value). We need cond = (neg == 0). 
+  i32.const 0
+  i32.eq
+  if
+    ; x == INT_MIN
+    i32.const 47
+    local.set 2
+    br $done   ; exit block
+  end
+  ; else (neg !=0): neg is magnitude (in 1..2147483647)
+  ; But we already consumed neg? Stack: after inner if (no result), stack empty? Let's track.
+```
+Need track stack carefully. Inside outer if (x<0):
+```
+local.get 0      ; stack: [x]
+i32.const 0      ; stack: [x,0]
+i32.sub          ; stack: [neg]  (0 - x)
+i32.const 0      ; stack: [neg,0]
+i32.eq           ; stack: [cond]  (neg==0)
+if
+  i32.const 47   ; stack: [47]
+  local.set 2    ; pops 47, sets local2=47; stack: []
+  br $done       ; branch to block end; stack: [] (br consumes nothing; stack must match block type)
+else
+  ; nothing? Need set n=neg. But we consumed neg? Wait cond consumed neg? Let's re-track: after i32.sub stack [neg]. i32.const 0 -> [neg,0]. i32.eq -> [cond]. The neg value is consumed by i32.eq (it pops two and pushes cond). So neg is lost! We need to keep neg.
+```
+Problem: i32.eq consumes both operands, losing neg. We need to test neg==0 while preserving neg. Options:
+- Use i32.eqz on neg (0x45?) which pops one and pushes cond, preserving nothing (neg consumed). Actually i32.eqz pops one value and pushes cond; neg is consumed. Still loses neg.
+- Use local.set to store neg before testing. That's clean: 
+```
+local.get 0
+i32.const 0
+i32.sub
+local.set 1     ; n = -x (magnitude, or 0 if INT_MIN)
+local.get 1
+i32.const 0
+i32.eq
+if
+  i32.const 47
+  local.set 2
+  br $done
+else
+  ; nothing (n already in local 1)
+end
+```
+Then after outer if, if x<0 and not INT_MIN, local 1 = magnitude; if INT_MIN, we br'd out; if x>=0, we set local 1 = x. Need to structure so local 1 is set in both cases.
+
+Let's restructure outer control:
+```
+block $done
+  local.get 0
+  i32.const 0
+  i32.lt_s
+  if
+    ; x < 0
+    local.get 0
+    i32.const 0
+    i32.sub
+    local.set 1            ; n = -x (wrapping; 0 if INT_MIN)
+    local.get 1
+    i32.const 0
+    i32.eq
+    if
+      i32.const 47
+      local.set 2
+      br $done
+    end
+    ; else: n valid, proceed (local 1 set)
+  else
+    ; x >= 0
+    local.get 0
+    local.set 1
+  end
+  ; init sum
+  i32.const 0
+  local.set 2
+  loop $L
+    local.get 1
+    i32.const 0
+    i32.eq
+    br_if $done            ; if n==0, exit block (result = sum, already local2)
+    local.get 1
+    i32.const 10
+    i32.rem_u
+    local.get 2
+    i32.add
+    local.set 2
+    local.get 1
+    i32.const 10
+    i32.div_u
+    local.set 1
+    br $L
+  end
+end
+local.get 2
+end
+```
+Now stack discipline:
+- Outer if (x<0): entering with x on stack? Let's track: local.get 0 (stack [x]), i32.const 0 ([x,0]), i32.lt_s (pops 0 and x -> [cond]), if consumes cond -> entering if with stack [] (if blocktype void). Inside outer if: local.get 0 ([x]), i32.const 0 ([x,0]), i32.sub ([neg]), local.set 1 (pops neg, sets local1; stack []), local.get 1 ([n]), i32.const 0 ([n,0]), i32.eq ([cond]), if (consumes cond; stack []), i32.const 47 ([47]), local.set 2 (pops 47; stack []), br $done (branch; stack [] must match block type void). Good. Else (inner else) empty; end. After inner if/else, stack []. Outer if else: local.get 0 ([x]), local.set 1 (pops x; stack []). end outer if. Stack [] after. Good.
+- init sum: i32.const 0 ([0]), local.set 2 (pops 0; stack []). Good.
+- loop: entering with stack []. local.get 1 ([n]), i32.const 0 ([n,0]), i32.eq ([cond]), br_if $done (consumes cond; stack []; if cond true jumps to block end; stack [] matches block type void). If not branch: local.get 1 ([n]), i32.const 10 ([n,10]), i32.rem_u ([r]), local.get 2 ([r,sum]), i32.add ([r+sum]), local.set 2 (pops; stack []), local.get 1 ([n]), i32.const 10 ([n,10]), i32.div_u ([n/10]), local.set 1 (pops; stack []), br $L (stack []). Good. After loop end (if reached, but br $L always taken), stack []. end block. After block, stack []. local.get 2 ([result]), end. Function result i32. Good.
+
+Now, subtle: br_if $done inside loop: label depth at that point = ? We have block $done (depth? ) and loop $L. Let's count label indices at the point of br_if. The block is the outermost structured construct; loop is inside it. At br_if (inside loop), the enclosing structured instructions are: loop (innermost), block (outer). So label indices: 0 = loop, 1 = block. br_if 1 branches to block (end of block). Good. br $done in INT_MIN branch: at that point, enclosing structured instructions: outer if (x<0) (innermost), block (outer). Wait INT_MIN branch is inside outer if (x<0), which is inside block. So enclosing structured instructions at br $done: inner if (x<0)? Actually the INT_MIN branch is inside the inner if (neg==0) inside outer if (x<0) inside block. So label stack at br $done: inner if (x<0)? Let's count carefully: We have block $done (outer). Inside block: outer if (x<0) [call it A]. Inside A: inner if (neg==0) [call it B]. Inside B: br $done. So enclosing structured instructions from innermost: B (inner if), A (outer if), block. That's 3 labels: 0 = B (inner if), 1 = A (outer if), 2 = block. So `br $done` should be br with label index 2 (to block), not 1! I need to be careful with label indices everywhere.
+
+Similarly, `br $L` inside loop (after body): enclosing structured instructions: loop (innermost), block (outer). Wait the loop is inside block; inside loop there is no other structured instruction. So labels: 0 = loop, 1 = block. br 0 = loop. br_if $done (block) = br_if 1. Good.
+
+For INT_MIN branch br to block: label index 2 (block). Let's verify: block (depth 2), outer if A (depth 1), inner if B (depth 0). Yes, br 2 -> block. Good. Need use br 2.
+
+But wait: does `br` inside an `if` branch to a label outside the if work? Yes, br to enclosing block. The block is the target; stack at target must match block type (void). At br 2, stack []; block type void; good. The branch skips the rest of outer if (A) and the rest of block. Good.
+
+Also need to double check the outer `if` (x<0) else branch: outer if has else (x>=0) with instructions local.get 0; local.set 1. Good. The outer if blocktype: void (0x40). It has an else; encoding: if blocktype instr* else instr* end. Valid.
+
+Now `br_if $done` when n==0: This exits the block, skipping the loop (which is the only thing inside the block after init sum). But note: we already initialized sum (local2=0) before the loop. For n==0 (i.e., x>=0 and x==0, or x<0 with n==0 impossible because n==0 means INT_MIN handled; for x<0 non-INT_MIN, n>=1), loop body: local.get 1 (n=0), i32.const 0, i32.eq -> cond true, br_if 1 -> exit block. Result local2=0. Good. For x=0, local1=0, sum=0, exit, result 0. Good.
+
+Now need ensure `br_if` consumes condition and does not require a blocktype. Yes br_if (0x07) takes labelidx only. Good.
+
+Now encoding details.
+
+Function body instructions (i32 only). Need exact opcode values. Let's settle i32 opcodes with confidence. I'm fairly confident:
+- local.get = 0x20
+- local.set = 0x21
+- i32.const = 0x41
+- i32.lt_s = ? (need)
+- i32.eq = ?
+- i32.sub = ?
+- i32.add = ?
+- i32.rem_u = ?
+- i32.div_u = ?
+- block = 0x02, loop = 0x03, if = 0x04, else = 0x05, br = 0x06, br_if = 0x07, end = 0x0b.
+
+Need i32 comparison/arith opcodes. I earlier guessed: i32.eq=0x46? Let's verify. Hmm.
+
+I want to be accurate. Let's recall the WebAssembly numeric instruction opcode table from a reliable memory. I have seen it many times. Let me reconstruct carefully.
+
+From the WebAssembly spec (binary format), the opcode list (I'm now recalling):
+```
+unreachable         0x00
+nop                 0x01
+block               0x02
+loop                0x03
+if                  0x04
+else                0x05
+br                  0x06
+br_if               0x07
+br_table            0x08
+return              0x0b? no
+```
+Ugh, I keep uncertainty. Let's recall by anchors:
+- `local.get` = 0x20 (I'm confident).
+- `local.set` = 0x21 (confident).
+- `local.tee` = 0x22 (confident).
+- `global.get` = 0x23 (confident).
+- `global.set` = 0x24 (confident).
+- `table.get` = 0x25? Actually I think `table.get` = 0x25? maybe 0x25 is `table.get`? Hmm.
+- `table.set` = 0x26? 
+- `table.size` = 0x27?
+- `table.grow` = 0x28?
+- `table.fill`? (reference types)
+- `memory.size` = 0x3f? no.
+- `i32.load` = 0x28? Wait conflict with table.grow=0x28. Hmm.
+
+Let's recall from a different anchor: I know `i32.load` opcode is 0x28? Actually I recall `i32.load` = 0x28, `i64.load` =0x29, `f32.load`=0x2a, `f64.load`=0x2b, `i32.load8_s`=0x2c, `i32.load8_u`=0x2d, `i32.load16_s`=0x2e, `i32.load16_u`=0x2f, `i64.load8_s`=0x30, `i64.load8_u`=0x31, `i64.load16_s`=0x32, `i64.load16_u`=0x33, `i64.load32_s`=0x34, `i64.load32_u`=0x35, `f32.load32_s`? no. And `memory.size`=0x3f? Actually `memory.size`=0x3f? Hmm. I recall `memory.size` = 0x3f? no maybe 0x3f is `memory.grow`? Not needed.
+
+Numeric instructions anchor: `i32.const` = 0x41 (confident). After that: `i64.const` = 0x42, `f32.const`=0x43, `f64.const`=0x44? Wait I recall `f32.const`=0x43 and `f64.const`=0x44? Hmm, but maybe `i32.const`=0x41, `i64.const`=0x42, `f32.const`=0x43, `f64.const`=0x44. That's 4 consts. Then `i32.eqz`=0x45, `i32.eq`=0x46, `i32.ne`=0x47, `i32.lt_s`=0x48, `i32.lt_u`=0x49, `i32.gt_s`=0x4a, `i32.gt_u`=0x4b, `i32.le_s`=0x4c, `i32.le_u`=0x4d, `i32.ge_s`=0x4e, `i32.ge_u`=0x4f. This matches the earlier guess. Then `i32.clz`=0x50, `i32.ctz`=0x51, `i32.popcnt`=0x52, `i32.add`=0x53, `i32.sub`=0x54, `i32.mul`=0x55, `i32.div_s`=0x56, `i32.div_u`=0x57, `i32.rem_s`=0x58, `i32.rem_u`=0x59, `i32.and`=0x5a, `i32.or`=0x5b, `i32.xor`=0x5c, `i32.rotl`=0x5d, `i32.rotr`=0x5e, `i32.shift_left`=0x5f, `i32.shift_right_s`=0x60, `i32.shift_right_u`=0x61. Then `i64.eqz`=0x62... This is consistent. I'm fairly confident in i32.eq=0x46, i32.lt_s=0x48, i32.add=0x53, i32.sub=0x54, i32.div_u=0x57, i32.rem_u=0x59. Good.
+
+But wait: I recall `i32.eqz` might be 0x45 and `i32.eq` 0x46 — yes. Good.
+
+Also `i32.eq` 0x46, `i32.lt_s` 0x48. Need `i32.eq` for comparing n==0. Could use i32.eqz instead (0x45) which is one operand. For n==0, i32.eqz is more natural and one fewer instruction: local.get 1; i32.eqz; br_if 1. That avoids i32.const 0 and i32.eq. Similarly for x<0, we need x<0: local.get 0; i32.const 0; i32.lt_s. Could use i32.lt_s with 0; fine. Or i32.gt? no. Keep.
+
+For INT_MIN detection, we can use i32.eqz on neg: local.get 1; i32.eqz; if ... This is one instruction (i32.eqz) instead of const 0 + eq. Nice. Use i32.eqz = 0x45. Need be confident i32.eqz = 0x45. I'm fairly confident. Let's double check by alternative: i32.eqz = 0x45? Another memory: In wasm, `i32.eqz` opcode = 0x45? I think yes. `i32.eq` = 0x46. Good.
+
+Also, for sum loop condition n==0, use i32.eqz (0x45). For x<0 condition, use i32.lt_s (0x48) with i32.const 0.
+
+Now, can we avoid i32.lt_s by using i32.eqz? We need x<0 (strictly). Not equal. So i32.lt_s needed. Alternatively, compute sign via x & 0x80000000 (i32.and) !=0 -> negative. That needs i32.and and i32.const 0x80000000 (2147483648, positive constant 2147483648? But i32.const for 2147483648? i32.const encodes signed i32; 2147483648 is out of range (max 2147483647). Can't encode. Could use 0x80000000 as unsigned? i32.const must be signed i32; 2147483648 invalid. So use i32.lt_s with 0. Fine.
+
+Now i32.const positive values: 0 (0x00), 10 (0x0a), 47 (0x2f). Positive signed LEB128 = unsigned LEB128 (since value < 2^31 and nonnegative, signed encoding = unsigned). Good. 0 -> 00. 10 -> 0a. 47 -> 2f.
+
+Now compute code body bytes and sizes. Let's write the instruction sequence with opcodes and bytes.
+
+I'll define:
+- local.get = 0x20, local.set = 0x21.
+- i32.const = 0x41 (followed by signed LEB128).
+- i32.lt_s = 0x48.
+- i32.eqz = 0x45.
+- i32.sub = 0x54.
+- i32.add = 0x53.
+- i32.rem_u = 0x59.
+- i32.div_u = 0x57.
+- block = 0x02 (blocktype 0x40)
+- loop = 0x03 (blocktype 0x40)
+- if = 0x04 (blocktype 0x40)
+- else = 0x05
+- br = 0x06 (labelidx)
+- br_if = 0x07 (labelidx)
+- end = 0x0b
+
+Let's assemble the body instructions in order:
+
+1. block (0x02) blocktype 0x40
+2. local.get 0 (0x20 0x00)
+3. i32.const 0 (0x41 0x00)
+4. i32.lt_s (0x48)
+5. if (0x04) blocktype 0x40
+6.   local.get 0 (0x20 0x00)
+7.   i32.const 0 (0x41 0x00)
+8.   i32.sub (0x54)
+9.   local.set 1 (0x21 0x01)
+10.   local.get 1 (0x20 0x01)
+11.   i32.eqz (0x45)
+12.   if (0x04) blocktype 0x40
+13.     i32.const 47 (0x41 0x2f)
+14.     local.set 2 (0x21 0x02)
+15.     br 2 (0x06 0x02)   ; to block (outer) — verify label index 2
+16.   else (0x05)
+17.   end (0x0b)
+18. else (0x05)
+19.   local.get 0 (0x20 0x00)
+20.   local.set 1 (0x21 0x01)
+21. end (0x0b)
+22. i32.const 0 (0x41 0x00)
+23. local.set 2 (0x21 0x02)
+24. loop (0x03) blocktype 0x40
+25.   local.get 1 (0x20 0x01)
+26.   i32.eqz (0x45)
+27.   br_if 1 (0x07 0x01)   ; to block (outer) — verify label index 1
+28.   local.get 1 (0x20 0x01)
+29.   i32.const 10 (0x41 0x0a)
+30.   i32.rem_u (0x59)
+31.   local.get 2 (0x20 0x02)
+32.   i32.add (0x53)
+33.   local.set 2 (0x21 0x02)
+34.   local.get 1 (0x20 0x01)
+35.   i32.const 10 (0x41 0x0a)
+36.   i32.div_u (0x57)
+37.   local.set 1 (0x21 0x01)
+38.   br 0 (0x06 0x00)
+39. end (0x0b)
+40. end (0x0b)
+41. local.get 2 (0x20 0x02)
+42. end (0x0b)
+
+Wait, need to double-check label indices for `br 2` in INT_MIN branch and `br_if 1` in loop.
+
+At INT_MIN branch (inside inner if B inside outer if A inside block): enclosing structured instructions: inner if B (0), outer if A (1), block (2). br 2 -> block. Correct.
+
+At br_if in loop (inside loop inside block): enclosing: loop (0), block (1). br_if 1 -> block. Correct.
+
+At br 0 in loop (back edge): enclosing loop (0), block(1). br 0 -> loop. Correct.
+
+Now, the INT_MIN branch uses br 2. But note: after `br 2` (to block), the rest of the block (init sum, loop) is skipped. Good. However, the outer if A and inner if B are also skipped by the branch (br to block jumps past them). Good. Stack at block end must match block type void. At br 2, stack [] (after local.set 2 popped the 47). Good. But wait: at the point of br 2, the inner if B has not been "closed" — br to an outer label is allowed; it exits all intervening blocks. Good.
+
+Now check outer if A structure: 
+- if (x<0) blocktype 0x40
+  - instructions (x<0 branch): local.get0, i32.const0, i32.sub, local.set1, local.get1, i32.eqz, if...end (inner if)
+  - else
+  - instructions (x>=0 branch): local.get0, local.set1
+  - end
+After outer if, stack []. Good.
+
+Inner if B structure:
+- if blocktype 0x40
+  - i32.const 47, local.set 2, br 2
+  - else
+  - end (empty else)
+Good. Note: br 2 inside inner if B; after br 2, inner if B and outer if A are both skipped. But the inner if B has an `else` and `end` after the br; since br branches out, those are never executed (fine). The structure is still valid (the else/end exist for encoding).
+
+Now check: the outer if A's else branch (x>=0) does NOT set local2 (sum). That's fine; sum initialized later.
+
+One subtlety: For x<0 and not INT_MIN (inner if B condition false), we fall through inner if (empty else) to after outer if. local1 = -x (magnitude). Good.
+
+Now the `if` opcode encoding: `if` = 0x04, blocktype u32. For void blocktype, u32 = 0x40 (which is 64). Actually blocktype for void is a single byte 0x40 (encoded as u32 LEB128 = 0x40). In binary format, blocktype is a u32 (LEB128). For void, the value is 0x40 (64) encoded as single byte 0x40 (since 64 < 128, one byte). For empty/resultless block, blocktype = 0x40. For a block with no params and result type t, blocktype = 0x40 if void else 0x40 | t? Actually blocktype encoding: 0x40 = void; otherwise 0x40 | type? For i32 result, blocktype = 0x7f? No. In the spec, blocktype is `0x40` for void, or `0x3f | ...`? Let's recall: blocktype is either `0x40` (void) or a type index? Hmm. In wasm, blocktype can be: `0x40` (void), `0x3f` (empty? no). Actually the blocktype in binary: if it's 0x40, it means void. Otherwise, it encodes a result type: for numeric types, the byte is the type (0x7f for i32, etc.)? Wait, but 0x7f is i32 type. So blocktype could be 0x7f meaning block with i32 result? But then blocktype=0x40 is void, and for a block with a single i32 result, blocktype = 0x7f? That seems odd because 0x7f is also the i32 type byte. Let's recall: blocktype encoding:
+```
+blocktype ::= 0x40 (void) | 0x3f? | type index? 
+```
+Hmm. Actually in wasm MVP, blocktype is a single byte: 0x40 means void (no result). For a block with a single result, the blocktype is the result type byte (e.g., 0x7f for i32, 0x7e for i64, 0x7d for f32, 0x7c for f64). For multiple results (multi-value), blocktype is 0x3f followed by a vector? Not in MVP.
+
+Wait, I recall: blocktype is `0x40` for empty (void), or `0x40 | ...`? Let's verify. The wasm binary format for `block`/`loop`/`if`: `blocktype` is a u32 (LEB128). The value 0x40 (64) means "no result" (void). Otherwise, the value is the result type encoded as a "value type"? But value types are single bytes (0x7f i32, 0x7e i64, 0x7d f32, 0x7c f64). So blocktype for i32 result = 0x7f? That would collide with type byte but in blocktype context it's fine.
+
+Actually I recall the blocktype is: `0x40` for void; otherwise `0x40`? No. Let's recall from spec: 
+```
+blocktype ::= 0x40 | type_idx? 
+```
+Hmm. In the MVP (before multi-value), a block has at most one result. The blocktype is encoded as:
+- 0x40 if no result (void), else
+- the result value type byte (0x7f, 0x7e, 0x7d, 0x7c).
+Yes, I'm fairly confident: void blocktype = 0x40 (64). For i32 result, blocktype = 0x7f (127). This matches: blocktype is a single byte 0x40 for void, else the value type. But in the binary format, blocktype is `u32`? Actually the spec says blocktype is a single byte? Let's recall: In the binary format, `blocktype` is encoded as a `u32`? Hmm.
+
+I think blocktype is encoded as a single byte: 0x40 for void, or the value type byte. Let me verify with known bytes: A function `(func (result i32) i32.const 1 end)` — the function's type encodes result i32 (in type section). Inside the function body, there's no block; end just ends. Not helpful.
+
+For `(block (result i32) i32.const 1)`, body: `02 7f 41 01 0b`? I think blocktype for i32 result is 0x7f. Yes, I'm fairly confident. For void block, `02 40 ... 0b`. Good. So void blocktype = 0x40. Good.
+
+Now let's compute code body bytes. I'll list each instruction's bytes.
+
+Instruction encoding:
+- local.get 0: 0x20 0x00 (2 bytes)
+- local.set 1: 0x21 0x01 (2 bytes)
+- local.set 2: 0x21 0x02 (2 bytes)
+- local.get 1: 0x20 0x01 (2 bytes)
+- local.get 2: 0x20 0x02 (2 bytes)
+- i32.const 0: 0x41 0x00 (2 bytes)
+- i32.const 10: 0x41 0x0a (2 bytes)
+- i32.const 47: 0x41 0x2f (2 bytes)
+- i32.lt_s: 0x48 (1 byte)
+- i32.eqz: 0x45 (1 byte)
+- i32.sub: 0x54 (1 byte)
+- i32.add: 0x53 (1 byte)
+- i32.rem_u: 0x59 (1 byte)
+- i32.div_u: 0x57 (1 byte)
+- block: 0x02 0x40 (2 bytes)
+- loop: 0x03 0x40 (2 bytes)
+- if: 0x04 0x40 (2 bytes)
+- else: 0x05 (1 byte)
+- br label: 0x06 labelidx (2 bytes for label<128)
+- br_if label: 0x07 labelidx (2 bytes)
+- end: 0x0b (1 byte)
+
+Now assemble body (after locals). Let's list body instruction bytes sequentially:
+
+1. block: 02 40 (2)
+2. local.get 0: 20 00 (2)
+3. i32.const 0: 41 00 (2)
+4. i32.lt_s: 48 (1)
+5. if: 04 40 (2)
+6.   local.get 0: 20 00 (2)
+7.   i32.const 0: 41 00 (2)
+8.   i32.sub: 54 (1)
+9.   local.set 1: 21 01 (2)
+10.   local.get 1: 20 01 (2)
+11.   i32.eqz: 45 (1)
+12.   if: 04 40 (2)
+13.     i32.const 47: 41 2f (2)
+14.     local.set 2: 21 02 (2)
+15.     br 2: 06 02 (2)
+16.   else: 05 (1)
+17.   end: 0b (1)
+18. else: 05 (1)
+19.   local.get 0: 20 00 (2)
+20.   local.set 1: 21 01 (2)
+21. end: 0b (1)
+22. i32.const 0: 41 00 (2)
+23. local.set 2: 21 02 (2)
+24. loop: 03 40 (2)
+25.   local.get 1: 20 01 (2)
+26.   i32.eqz: 45 (1)
+27.   br_if 1: 07 01 (2)
+28.   local.get 1: 20 01 (2)
+29.   i32.const 10: 41 0a (2)
+30.   i32.rem_u: 59 (1)
+31.   local.get 2: 20 02 (2)
+32.   i32.add: 53 (1)
+33.   local.set 2: 21 02 (2)
+34.   local.get 1: 20 01 (2)
+35.   i32.const 10: 41 0a (2)
+36.   i32.div_u: 57 (1)
+37.   local.set 1: 21 01 (2)
+38.   br 0: 06 00 (2)
+39. end: 0b (1)
+40. end: 0b (1)
+41. local.get 2: 20 02 (2)
+42. end: 0b (1)
+
+Now compute total body length (instructions). Let's sum bytes:
+
+1 block 2
+2 local.get0 2 -> cum 4
+3 i32.const0 2 -> 6
+4 lt_s 1 -> 7
+5 if 2 -> 9
+6 local.get0 2 -> 11
+7 i32.const0 2 -> 13
+8 sub 1 -> 14
+9 local.set1 2 -> 16
+10 local.get1 2 -> 18
+11 eqz 1 -> 19
+12 if 2 -> 21
+13 i32.const47 2 -> 23
+14 local.set2 2 -> 25
+15 br2 2 -> 27
+16 else 1 -> 28
+17 end 1 -> 29
+18 else 1 -> 30
+19 local.get0 2 -> 32
+20 local.set1 2 -> 34
+21 end 1 -> 35
+22 i32.const0 2 -> 37
+23 local.set2 2 -> 39
+24 loop 2 -> 41
+25 local.get1 2 -> 43
+26 eqz 1 -> 44
+27 br_if1 2 -> 46
+28 local.get1 2 -> 48
+29 i32.const10 2 -> 50
+30 rem_u 1 -> 51
+31 local.get2 2 -> 53
+32 add 1 -> 54
+33 local.set2 2 -> 56
+34 local.get1 2 -> 58
+35 i32.const10 2 -> 60
+36 div_u 1 -> 61
+37 local.set1 2 -> 63
+38 br0 2 -> 65
+39 end 1 -> 66
+40 end 1 -> 67
+41 local.get2 2 -> 69
+42 end 1 -> 70
+
+Instruction bytes total = 70 bytes.
+
+Locals bytes: locals vec = count u32 (1) + entry (count u32=2, type 0x7f). Encode: 01 00 00 00 (count=1) + 02 00 00 00 (entry count=2) + 7f (type i32) = 4+4+1 = 9 bytes.
+
+Body (locals + instructions) = 9 + 70 = 79 bytes. Wait, code entry body = locals vec + instructions + end? The `end` is included in instructions (item 42 end). The locals vec is separate. The code body = locals vec + instr* + end. The instr* includes the final `end` (item 42). So body bytes = locals (9) + instruction bytes (70) = 79. But note the 70 instruction bytes include the final `end` (item 42). Yes. So body = 79 bytes. Code entry size = 79 (0x4f).
+
+Hold on: Is the final `end` part of instructions or separate? In the code section, the body is: `locals` `instr*` `end`. The instr* includes the final `end`? Actually the `end` is a separate token after instr*. The body = locals vec + instr* + end. The instr* are the instructions before end; the final end is the terminator. In my instruction list, item 42 `end` is the terminator (function end). Items 1..41 are instructions; item 42 is the terminator. So instr* = items 1..41, and terminator end = item 42. That's consistent: the 70 bytes include item 42 (the function end). The body = locals (9) + items 1..42 bytes (70) = 79. Good. (Equivalently locals + instr* + end = 9 + (70-1) +1 = 79.)
+
+Now code section:
+id = 0x0a (10)
+contents = count u32 (1) + code entry.
+code entry = size u32 (body size = 79) + body bytes (79).
+contents = 4 (count) + 4 (size) + 79 (body) = 87 bytes.
+size = 87 = 0x57.
+
+Let's verify body size 79 = 0x4f. 79 decimal = 0x4f (0x4f = 79). Yes.
+
+Now assemble full module.
+
+Sections:
+1. Type section (id 1):
+   contents = count u32=1 + type record.
+   type record = 0x60 (functype) + param count 0x01 + param type 0x7f + result count 0x01 + result type 0x7f.
+   = 0x60 0x01 0x7f 0x01 0x7f = 6 bytes.
+   contents = 4 (count) + 6 = 10 bytes. size=0x0a.
+   bytes: 01 0a 01 00 00 00 60 01 7f 01 7f.
+   Wait count u32=1 -> 01 00 00 00 (4 bytes). Then record 6 bytes. contents = 10 bytes. size = 0x0a (10). Good.
+   Section bytes: 01 0a 01 00 00 00 60 01 7f 01 7f. Let's count: id(1) size(1) contents(10) =12 bytes. Contents: 01 00 00 00 (4) + 60 01 7f 01 7f (6) =10. Good.
+
+2. Function section (id 3):
+   contents = count u32=1 + entry type index u32=0.
+   = 01 00 00 00 (count) + 00 00 00 00 (type idx) = 8 bytes. size=0x08.
+   Section bytes: 03 08 01 00 00 00 00 00 00 00. (1+1+8=10 bytes)
+
+3. Export section (id 7):
+   contents = count u32=1 + export record.
+   export record = name len u32=9 + name bytes (9) + kind byte 0x00 + index u32=0.
+   name len = 09 00 00 00 (4 bytes). name bytes = 9 (64 69 67 69 74 5f 73 75 6d). kind = 00. index = 00 00 00 00 (4).
+   record = 4+9+1+4 = 18 bytes.
+   contents = 4 (count) + 18 = 22 bytes. size=0x16 (22).
+   Section bytes: 07 16 01 00 00 00 09 00 00 00 64 69 67 69 74 5f 73 75 6d 00 00 00 00 00.
+   Let's count contents: 01 00 00 00 (4) + 09 00 00 00 (4) + 64 69 67 69 74 5f 73 75 6d (9) + 00 (1) + 00 00 00 00 (4) = 4+4+9+1+4 =22. Good.
+
+4. Code section (id 10 = 0x0a):
+   contents = count u32=1 + code entry.
+   code entry = size u32=79 (0x4f) + body bytes (79).
+   contents = 4 (count) + 4 (size) + 79 = 87 bytes. size=0x57 (87).
+   Section bytes: 0a 57 01 00 00 00 4f 00 00 00 [body bytes].
+   size u32=79 = 4f 00 00 00 (since 79 < 128, 4f only? Wait size u32 is 4 bytes always? In binary format, u32 is encoded as 4 bytes little-endian (not LEB128) for counts and sizes? Hmm! Critical: In WebAssembly binary format, are section sizes and counts encoded as LEB128 or as 4-byte little-endian?
+
+Important: In wasm binary format, section id and size are encoded as LEB128 (varint), NOT 4-byte. Let's recall: The binary format uses LEB128 for `u32`/`s32` values throughout (counts, sizes, indices, offsets). Section id is a single byte? Actually section id is a `u8`? Hmm.
+
+Let's recall the wasm binary format precisely. From the spec:
+```
+module = magic version section*
+magic = 0x00 0x61 0x73 0x6d
+version = u32 (0x01 0x00 0x00 0x00)
+section = id size content
+id = u8 (section id)
+size = u32 (LEB128) — the size of content
+```
+Actually I think section id is a u8 (single byte) and size is a u32 (LEB128). The version is u32 (4 bytes LE). The magic is 4 bytes. Counts and sizes are u32 encoded as LEB128. Yes, wasm uses LEB128 for u32 values. So section size is LEB128 (variable length), not 4 bytes. Similarly counts (number of types, etc.) are u32 LEB128, not 4 bytes. And function body size is u32 LEB128. And local counts are u32 LEB128. And name length is u32 LEB128.
+
+This changes everything! I incorrectly used 4-byte little-endian for counts/sizes. Need to redo with LEB128.
+
+Let's recall exactly: In the WebAssembly binary format, the types are:
+- `u32`, `u64`, `s32`, `s64`, `u8`, `i32`, etc. The binary encoding uses LEB128 for unsigned (u32) and signed (s32) values, and single byte for u8. Section id is a `u8`? Actually section id is a single byte (u8). The size of a section is `u32` (LEB128). The magic is 4 bytes, version is 4 bytes (u32) — actually version is `u32` encoded as 4 bytes? Let's recall: magic = 4 bytes (00 61 73 6d). version = u32 (4 bytes little-endian? or LEB128?). In wasm, the version is `01 00 00 00` (4 bytes). I believe version is a 4-byte little-endian u32 (not LEB128). Yes, the version is a fixed 4 bytes: 01 00 00 00. Magic fixed 4 bytes. Then sections: each section = id (u8, single byte) + size (u32 LEB128) + content (size bytes).
+
+Wait, is section id a single byte or LEB128? I recall section id is a single byte (u8). Let's verify: sections are numbered 1..11; id fits in one byte. The spec says `section = id size content`, where `id` is a `u8`. Yes, id is u8 (single byte). size is `u32` (LEB128). Good.
+
+Within a section, counts (e.g., number of types) are `u32` (LEB128). Type records: functype = 0x60 (single byte) + param count (u32 LEB128) + param types (u8 each) + result count (u32 LEB128) + result types (u8 each). Local entries: count (u32 LEB128) + type (u8). Code entry: size (u32 LEB128) + body. Export: count (u32 LEB128) + export records (name len u32 LEB128 + name + kind u8 + index u32 LEB128). Function entry: type index u32 LEB128. Function body: locals vec = count (u32 LEB128) + local entries; then instr*; then end.
+
+Indices (local index, label index, etc.) are u32 LEB128. In my instruction list, local.get 0 -> 0x20 0x00 (LEB128 for 0 = 0x00). local.get 1 -> 0x20 0x01. local.set 2 -> 0x21 0x02. br 2 -> 0x06 0x02. br_if 1 -> 0x07 0x01. br 0 -> 0x06 0x00. All indices <128, so single byte. Good.
+
+i32.const positive values: 0 -> 0x00; 10 -> 0x0a; 47 -> 0x2f. Good (LEB128).
+
+Now recompute sizes with LEB128.
+
+Type section:
+contents = count u32 LEB128 (1) = 0x01 (1 byte) + type record.
+type record = 0x60 (1) + param count u32 LEB128 (1) = 0x01 (1 byte) + param type 0x7f (1) + result count u32 LEB128 (1) = 0x01 (1) + result type 0x7f (1) = 6 bytes? Let's count: 0x60 (1) + 0x01 (1) + 0x7f (1) + 0x01 (1) + 0x7f (1) = 5 bytes. Wait param count u32 LEB128 for 1 = single byte 0x01. So record = 0x60, 0x01, 0x7f, 0x01, 0x7f = 5 bytes. Earlier I had 6 (I used 4-byte count). Now 5.
+contents = 1 (count) + 5 = 6 bytes. size = 6 (0x06).
+Section bytes: id 0x01, size 0x06, contents (6) = 01 06 01 60 01 7f 01 7f.
+Let's count: contents = 01 (count) + 60 01 7f 01 7f (5) = 6. Good.
+
+Function section:
+contents = count u32 LEB128 (1) = 0x01 (1 byte) + entry type index u32 LEB128 (0) = 0x00 (1 byte) = 2 bytes. size = 2 (0x02).
+Section bytes: 03 02 01 00.
+
+Export section:
+contents = count u32 LEB128 (1) = 0x01 (1 byte) + export record.
+export record = name len u32 LEB128 (9) = 0x09 (1 byte) + name bytes (9) + kind u8 (0x00) + index u32 LEB128 (0) = 0x00 (1 byte).
+record = 1 + 9 + 1 + 1 = 12 bytes.
+contents = 1 + 12 = 13 bytes. size = 13 (0x0d).
+Section bytes: 07 0d 01 09 64 69 67 69 74 5f 73 75 6d 00 00.
+Let's count contents: 01 (count) + 09 (name len) + 64 69 67 69 74 5f 73 75 6d (9) + 00 (kind) + 00 (index) = 1+1+9+1+1 =13. Good. Section bytes: 07 0d 01 09 64 69 67 69 74 5f 73 75 6d 00 00. That's 1+1+13=15 bytes.
+
+Code section:
+contents = count u32 LEB128 (1) = 0x01 (1 byte) + code entry.
+code entry = size u32 LEB128 (body size) + body.
+body = locals vec + instructions (incl final end).
+locals vec = count u32 LEB128 (number of local entries) = 0x01 (1 byte) + entry: count u32 LEB128 (number of locals in entry = 2) = 0x02 (1 byte) + type u8 (0x7f) = 1 byte. locals vec = 1 + 1 + 1 = 3 bytes.
+Wait locals vec = count of entries (1) + entry. Entry = count (2) + type (0x7f). So locals vec = 0x01 (count entries) + 0x02 (entry count) + 0x7f (type) = 3 bytes. Good (earlier 9 bytes with 4-byte counts; now 3 bytes).
+
+instructions bytes: previously computed 70 bytes. Let's recompute instruction byte count carefully (excluding locals, including final end).
+
+Let's recount instruction bytes (items 1..42) with LEB128 (indices single byte):
+
+1. block: 02 40 (2)
+2. local.get 0: 20 00 (2) -> cum 4
+3. i32.const 0: 41 00 (2) -> 6
+4. i32.lt_s: 48 (1) -> 7
+5. if: 04 40 (2) -> 9
+6.   local.get 0: 20 00 (2) -> 11
+7.   i32.const 0: 41 00 (2) -> 13
+8.   i32.sub: 54 (1) -> 14
+9.   local.set 1: 21 01 (2) -> 16
+10.   local.get 1: 20 01 (2) -> 18
+11.   i32.eqz: 45 (1) -> 19
+12.   if: 04 40 (2) -> 21
+13.     i32.const 47: 41 2f (2) -> 23
+14.     local.set 2: 21 02 (2) -> 25
+15.     br 2: 06 02 (2) -> 27
+16.   else: 05 (1) -> 28
+17.   end: 0b (1) -> 29
+18. else: 05 (1) -> 30
+19.   local.get 0: 20 00 (2) -> 32
+20.   local.set 1: 21 01 (2) -> 34
+21. end: 0b (1) -> 35
+22. i32.const 0: 41 00 (2) -> 37
+23. local.set 2: 21 02 (2) -> 39
+24. loop: 03 40 (2) -> 41
+25.   local.get 1: 20 01 (2) -> 43
+26.   i32.eqz: 45 (1) -> 44
+27.   br_if 1: 07 01 (2) -> 46
+28.   local.get 1: 20 01 (2) -> 48
+29.   i32.const 10: 41 0a (2) -> 50
+30.   i32.rem_u: 59 (1) -> 51
+31.   local.get 2: 20 02 (2) -> 53
+32.   i32.add: 53 (1) -> 54
+33.   local.set 2: 21 02 (2) -> 56
+34.   local.get 1: 20 01 (2) -> 58
+35.   i32.const 10: 41 0a (2) -> 60
+36.   i32.div_u: 57 (1) -> 61
+37.   local.set 1: 21 01 (2) -> 63
+38.   br 0: 06 00 (2) -> 65
+39. end: 0b (1) -> 66
+40. end: 0b (1) -> 67
+41. local.get 2: 20 02 (2) -> 69
+42. end: 0b (1) -> 70
+
+Instruction bytes = 70 (same as before, since indices/constants are single bytes). Good. Body = locals (3) + instructions (70) = 73 bytes. Wait: locals vec (3) + instruction bytes (70) = 73. Earlier I had 79 (with 4-byte counts). Now body = 73 bytes.
+
+Hold on: Is the function `end` (item 42) included in "instructions"? In wasm, the body is `locals` `instr*` `end`. The `instr*` are the instructions (items 1..41) and then `end` (item 42) is the terminator. So body = locals (3) + instr* (items 1..41 = 69 bytes) + end (1 byte) = 3 + 69 + 1 = 73. Yes 73. Good.
+
+code entry = size u32 LEB128 (73) + body (73). size 73 <128 -> single byte 0x49 (73). code entry = 1 (size) + 73 (body) = 74 bytes.
+contents = count u32 LEB128 (1) = 0x01 (1 byte) + code entry (74) = 75 bytes. size = 75 (0x4b).
+
+Let's double check body size = 73 = 0x49 (0x49 = 73). Yes. code entry size = 1 + 73 = 74. contents = 1 + 74 = 75. size = 75 = 0x4b.
+
+Now assemble the full module:
+
+magic: 00 61 73 6d
+version: 01 00 00 00 (4 bytes, fixed)
+
+Sections in order: type(1), function(3), export(7), code(10). (Skipping import 2, table 4, memory 5, global 6, start 8, elem 9, data 11.)
+
+Section 1 (type): 01 06 01 60 01 7f 01 7f
+Section 3 (function): 03 02 01 00
+Section 7 (export): 07 0d 01 09 64 69 67 69 74 5f 73 75 6d 00 00
+Section 10 (code): 0a 4b 01 49 [body bytes]
+
+Now write body bytes (73 bytes) in order. Let's list them:
+
+locals vec: 01 02 7f
+Then instructions (items 1..42):
+1 block: 02 40
+2 local.get0: 20 00
+3 i32.const0: 41 00
+4 lt_s: 48
+5 if: 04 40
+6 local.get0: 20 00
+7 i32.const0: 41 00
+8 sub: 54
+9 local.set1: 21 01
+10 local.get1: 20 01
+11 eqz: 45
+12 if: 04 40
+13 i32.const47: 41 2f
+14 local.set2: 21 02
+15 br2: 06 02
+16 else: 05
+17 end: 0b
+18 else: 05
+19 local.get0: 20 00
+20 local.set1: 21 01
+21 end: 0b
+22 i32.const0: 41 00
+23 local.set2: 21 02
+24 loop: 03 40
+25 local.get1: 20 01
+26 eqz: 45
+27 br_if1: 07 01
+28 local.get1: 20 01
+29 i32.const10: 41 0a
+30 rem_u: 59
+31 local.get2: 20 02
+32 add: 53
+33 local.set2: 21 02
+34 local.get1: 20 01
+35 i32.const10: 41 0a
+36 div_u: 57
+37 local.set1: 21 01
+38 br0: 06 00
+39 end: 0b
+40 end: 0b
+41 local.get2: 20 02
+42 end: 0b
+
+Let's concatenate body bytes and count them to ensure 73.
+
+I'll write them as a list with running count. Let's just count bytes by summing item sizes (already did: locals 3 + instructions 70 = 73). Good. Now I need to produce the hex string carefully. Let's build the full byte list.
+
+Full module bytes:
+
+magic: 00 61 73 6d
+version: 01 00 00 00
+
+Section type: 01 06 01 60 01 7f 01 7f
+Section function: 03 02 01 00
+Section export: 07 0d 01 09 64 69 67 69 74 5f 73 75 6d 00 00
+Section code: 0a 4b 01 49 [body]
+
+Let's write body as hex pairs:
+locals: 01 02 7f
+block: 02 40
+local.get0: 20 00
+i32.const0: 41 00
+lt_s: 48
+if: 04 40
+local.get0: 20 00
+i32.const0: 41 00
+sub: 54
+local.set1: 21 01
+local.get1: 20 01
+eqz: 45
+if: 04 40
+i32.const47: 41 2f
+local.set2: 21 02
+br2: 06 02
+else: 05
+end: 0b
+else: 05
+local.get0: 20 00
+local.set1: 21 01
+end: 0b
+i32.const0: 41 00
+local.set2: 21 02
+loop: 03 40
+local.get1: 20 01
+eqz: 45
+br_if1: 07 01
+local.get1: 20 01
+i32.const10: 41 0a
+rem_u: 59
+local.get2: 20 02
+add: 53
+local.set2: 21 02
+local.get1: 20 01
+i32.const10: 41 0a
+div_u: 57
+local.set1: 21 01
+br0: 06 00
+end: 0b
+end: 0b
+local.get2: 20 02
+end: 0b
+
+Now let's count body bytes by grouping. I'll count items: locals 3 (01 02 7f). Then each instruction item sizes:
+1 block 2 ->5
+2 local.get0 2 ->7
+3 const0 2 ->9
+4 lt_s 1 ->10
+5 if 2 ->12
+6 local.get0 2 ->14
+7 const0 2 ->16
+8 sub 1 ->17
+9 local.set1 2 ->19
+10 local.get1 2 ->21
+11 eqz 1 ->22
+12 if 2 ->24
+13 const47 2 ->26
+14 local.set2 2 ->28
+15 br2 2 ->30
+16 else 1 ->31
+17 end 1 ->32
+18 else 1 ->33
+19 local.get0 2 ->35
+20 local.set1 2 ->37
+21 end 1 ->38
+22 const0 2 ->40
+23 local.set2 2 ->42
+24 loop 2 ->44
+25 local.get1 2 ->46
+26 eqz 1 ->47
+27 br_if1 2 ->49
+28 local.get1 2 ->51
+29 const10 2 ->53
+30 rem_u 1 ->54
+31 local.get2 2 ->56
+32 add 1 ->57
+33 local.set2 2 ->59
+34 local.get1 2 ->61
+35 const10 2 ->63
+36 div_u 1 ->64
+37 local.set1 2 ->66
+38 br0 2 ->68
+39 end 1 ->69
+40 end 1 ->70
+41 local.get2 2 ->72
+42 end 1 ->73
+Body = 73 bytes. Good. Size = 0x49 (73). Code entry size = 1 (size byte) + 73 = 74 bytes. Code section contents = 1 (count) + 74 = 75 = 0x4b. Good.
+
+Now the full hex. Let's assemble carefully, then verify section sizes.
+
+Full hex string (I'll write as space-separated pairs):
+
+magic/version:
+00 61 73 6d 01 00 00 00
+
+Section type:
+01 06 01 60 01 7f 01 7f
+
+Section function:
+03 02 01 00
+
+Section export:
+07 0d 01 09 64 69 67 69 74 5f 73 75 6d 00 00
+
+Section code:
+0a 4b 01 49 01 02 7f 02 40 20 00 41 00 48 04 40 20 00 41 00 54 21 01 20 01 45 04 40 41 2f 21 02 06 02 05 0b 05 20 00 21 01 0b 41 00 21 02 03 40 20 01 45 07 01 20 01 41 0a 59 20 02 53 21 02 20 01 41 0a 57 21 01 06 00 0b 0b 20 02 0b
+
+Let's verify code section contents length: after "0a 4b", contents should be 75 bytes: 01 49 [body 73 bytes]. Let's count contents: 01 (count) + 49 (size) + body(73) = 75. Good. So code section = 0a 4b [75 bytes]. In my hex after "0a 4b": 01 49 01 02 7f 02 40 ... Let's count the body part after 49: it should be 73 bytes. Body hex:
+01 02 7f (3)
+02 40 (2) ->5
+20 00 (2)->7
+41 00 (2)->9
+48 (1)->10
+04 40 (2)->12
+20 00 (2)->14
+41 00 (2)->16
+54 (1)->17
+21 01 (2)->19
+20 01 (2)->21
+45 (1)->22
+04 40 (2)->24
+41 2f (2)->26
+21 02 (2)->28
+06 02 (2)->30
+05 (1)->31
+0b (1)->32
+05 (1)->33
+20 00 (2)->35
+21 01 (2)->37
+0b (1)->38
+41 00 (2)->40
+21 02 (2)->42
+03 40 (2)->44
+20 01 (2)->46
+45 (1)->47
+07 01 (2)->49
+20 01 (2)->51
+41 0a (2)->53
+59 (1)->54
+20 02 (2)->56
+53 (1)->57
+21 02 (2)->59
+20 01 (2)->61
+41 0a (2)->63
+57 (1)->64
+21 01 (2)->66
+06 00 (2)->68
+0b (1)->69
+0b (1)->70
+20 02 (2)->72
+0b (1)->73
+Body = 73 bytes. Good.
+
+Now let's double-check the export section contents length = 13 bytes. Export section hex after "07 0d": contents = 01 09 64 69 67 69 74 5f 73 75 6d 00 00. Count: 01(1) 09(1) 64 69 67 69 74 5f 73 75 6d (9) 00(1) 00(1) = 1+1+9+1+1 =13. Good. Wait export record = name len (09) + name (9) + kind (00) + index (00) = 1+9+1+1 =12 bytes; plus count (01) = 13. Good. The hex "07 0d 01 09 64 69 67 69 74 5f 73 75 6d 00 00": after 0d, bytes = 01 09 64 69 67 69 74 5f 73 75 6d 00 00 = 13 bytes. Good.
+
+Type section contents = 06 bytes: 01 60 01 7f 01 7f = 6 bytes. Good.
+
+Function section contents = 02 bytes: 01 00 = 2 bytes. Good.
+
+Now, one more check: the export index u32 = 0 (function 0). kind byte 0x00 = function. Good.
+
+Now, is the order of sections correct? type(1), function(3), export(7), code(10). Increasing. Good. No import section (2), no table (4), memory (5), global (6), start (8), elem (9), data (11). Good.
+
+Now double check the function body semantics once more by simulating.
+
+Example: digit_sum(0). x=0. block. local.get0 (0). i32.const0 (0). i32.lt_s -> 0<0 = false (0). if (cond false) skip to else. else branch: local.get0 (0); local.set1 (local1=0). end outer if. i32.const0; local.set2 (sum=0). loop: local.get1 (0); i32.eqz -> true (1); br_if 1 -> exit block (branch to block end). stack at block end: after br_if, stack empty (cond popped). Jump to end of block. After block: local.get2 (0); end. Result 0. Good.
+
+Example: digit_sum(1234567890). x=1234567890 >=0. local1=x. sum=0. Loop:
+iter1: local1=1234567890; eqz -> false (n!=0). br_if not taken. body: local1=1234567890; const10; rem_u -> 0 (1234567890 %10 =0). local2=0; add -> 0; local.set2=0. local1=1234567890; const10; div_u -> 123456789 (since 1234567890/10 = 123456789). local.set1. br0 (loop).
+iter2: local1=123456789; eqz false. body: rem_u -> 123456789%10 = 9 (last digit 9). sum=0+9=9. local1=123456789/10 = 12345678 (123456789/10 =12345678.9 floor=12345678). set1. br0.
+iter3: local1=12345678; rem_u = 8 (last digit 8). sum=9+8=17. div_u: 12345678/10 = 1234567 (1234567.8 floor 1234567). set1.
+iter4: local1=1234567; rem_u=7 (last digit 7). sum=17+7=24. div_u: 1234567/10=123456 (123456.7 floor 123456). set1.
+iter5: local1=123456; rem_u=6 (last digit 6). sum=24+6=30. div_u: 123456/10=12345 (12345.6 floor 12345). set1.
+iter6: local1=12345; rem_u=5 (last digit 5). sum=30+5=35. div_u: 12345/10=1234 (1234.5 floor 1234). set1.
+iter7: local1=1234; rem_u=4 (last digit 4). sum=35+4=39. div_u: 1234/10=123 (123.4 floor 123). set1.
+iter8: local1=123; rem_u=3 (last digit 3). sum=39+3=42. div_u: 123/10=12 (12.3 floor 12). set1.
+iter9: local1=12; rem_u=2 (last digit 2). sum=42+2=44. div_u: 12/10=1 (1.2 floor 1). set1.
+iter10: local1=1; eqz false. body: rem_u = 1%10 =1. sum=44+1=45. div_u: 1/10=0. set1=0. br0.
+iter11: local1=0; eqz true; br_if 1 -> exit block. Result local2=45. Good (expected 45).
+
+Example: digit_sum(-907). x=-907. x<0. local.get0 (-907); const0; sub -> 0 - (-907) = 907 (i32). local.set1 (local1=907). local.get1 (907); eqz -> false (907!=0). inner if not taken. end inner if. end outer if (x<0 branch). sum=0. loop:
+iter1: local1=907; eqz false. rem_u = 907%10 = 7 (last digit 7). sum=7. div_u: 907/10 = 90 (90.7 floor 90). set1=90.
+iter2: local1=90; eqz false. rem_u = 90%10 = 0. sum=7. div_u: 90/10 = 9. set1=9.
+iter3: local1=9; eqz false. rem_u = 9. sum=7+9=16. div_u: 9/10=0. set1=0.
+iter4: local1=0; eqz true; br_if 1 -> exit. Result 16. Expected 16. Good.
+
+Example: digit_sum(-2147483648). x=-2147483648. x<0. local.get0 (x); const0; sub -> 0 - (-2147483648). i32 wrapping: 0 - (-2147483648) = 2147483648, but i32 max is 2147483647, so wrapping: 2147483648 mod 2^32 = 2147483648; as i32 signed, 2147483648 = 0x80000000 = -2147483648? Wait compute: 0 - (-2147483648) in i32 (wrapping) = 2147483648. But 2147483648 doesn't fit in i32 (max 2147483647). In i32, 2147483648 is represented as -2147483648 (since 2147483648 mod 2^32 = 2147483648 = 0x80000000; as signed i32 that's -2147483648). Hmm wait: 0 - (-2147483648) = 2147483648 mathematically. In i32 wrapping, 2147483648 mod 2^32 = 2147483648 (since it's less than 2^32). As a signed i32, 2147483648 = -2147483648 (because 2147483648 = 2^31; signed interpretation = 2^31 - 2^32 = -2^31 = -2147483648). So local1 = -2147483648? But we wanted n=0 for INT_MIN detection! Let's re-examine.
+
+Wait, this is the crux. For x = -2147483648 (INT_MIN), we want to detect INT_MIN. We compute neg = 0 - x. Mathematically, -(-2147483648) = 2147483648. In i32 wrapping, 2147483648 mod 2^32 = 2147483648. The i32 value stored is the 32-bit bit pattern 0x80000000, which as signed is -2147483648. So local1 = -2147483648 (bit pattern 0x80000000). Then local.get1; i32.eqz -> is it 0? local1 = -2147483648 (nonzero), so eqz = false. Then inner if NOT taken! That's a bug: for INT_MIN, neg should be 0? No, I earlier said neg ==0 for INT_MIN. That was wrong! Let's reconsider.
+
+I made an error earlier: I claimed "if x<0 and (0 - x) == 0, then x == INT_MIN". Let's check: 0 - x for x = -2147483648: in i32 wrapping, 0 - (-2147483648) = 0 + 2147483648 = 2147483648. As i32, 2147483648 is represented as -2147483648 (bit pattern 0x80000000). So 0 - x = -2147483648 (not 0). Hmm. Actually wait: i32 subtraction wraps modulo 2^32. 0 - (-2147483648) = 0 + 2147483648 = 2147483648. Mod 2^32 = 2147483648. As a signed 32-bit value, 2147483648 is interpreted as 2147483648 - 4294967296 = -2147483648. So result = -2147483648, NOT 0. So my detection is wrong.
+
+Hold on: Let's reconsider. In i32, x = -2147483648 (0x80000000). i32.sub computes a - b = 0 - x. But which operand is a and which is b? Stack: local.get 0 (x), i32.const 0 (0), i32.sub. i32.sub pops b (top = 0) and a (second = x)? Wait stack order: [x, 0]. i32.sub pops top (0) as b, then pops x as a, result = a - b = x - 0 = x?? No! i32.sub computes (a - b) where a is the second-from-top and b is the top. Let's recall: For binary op i32.sub, the operands on the stack are [a, b] (a below b), and the result is a - b. The top of stack is b. So with stack [x, 0], a=x, b=0, result = x - 0 = x. That's wrong! I had it backwards.
+
+Let's fix: To compute -x (negation), I need stack [0, x] (0 below x), then i32.sub -> 0 - x = -x. So I should push 0 first then x: local.get 0? No. I want 0 - x. Stack should be [0, x] (0 below, x on top). So: i32.const 0 (push 0), local.get 0 (push x), i32.sub -> 0 - x = -x. 
+
+But in my code I wrote: local.get 0; i32.const 0; i32.sub. That computes x - 0 = x, NOT -x. Bug! Need to fix.
+
+Alternatively, to compute neg = -x: stack [0, x]; i32.sub -> 0 - x. So sequence: i32.const 0; local.get 0; i32.sub. Let's fix instruction 6-8:
+6. i32.const 0 (0x41 0x00)   ; push 0
+7. local.get 0 (0x20 0x00)   ; push x
+8. i32.sub (0x54)            ; result = 0 - x = -x
+9. local.set 1 (0x21 0x01)   ; local1 = -x
+10. local.get 1 (0x20 0x01)  ; push local1
+11. i32.eqz (0x45)           ; push (local1 == 0)
+
+Wait but now local1 = -x. For x = -2147483648 (INT_MIN): -x = 2147483648, in i32 wrapping = -2147483648 (bit pattern 0x80000000). local1 = -2147483648 (nonzero). eqz -> false. Still not detected as INT_MIN! The problem is that -x in i32 for INT_MIN wraps to INT_MIN (not 0). So the "neg==0" detection is invalid. I confused myself. Let's redo.
+
+The issue: In i32, the magnitude of INT_MIN is 2147483648, which cannot be represented. We want to detect INT_MIN. Options:
+(a) Detect INT_MIN via bit pattern: x < 0 AND x == 0x80000000. We can detect by: x < 0 AND (x XOR 0x80000000 == 0)? That needs constant 0x80000000 (not encodable as i32 const). Alternatively, detect INT_MIN by: x < 0 AND (0 - x == x)? Let's see: for INT_MIN, 0 - x = 0 - (-2147483648) = 2147483648 (wrapping -> -2147483648) = x. So 0 - x == x (both = x). For any other negative x (x != INT_MIN), 0 - x = -x (positive, in [1,2147483647]), which is != x (since x is negative). So INT_MIN iff x < 0 AND (0 - x == x). But computing 0 - x in i32 wraps; for INT_MIN, 0 - x = x (since -x wraps to x). Indeed 0 - x == x iff -x == x iff x == 0 (mod 2^32) or x == 2^31 (mod 2^32). x<0 means x is negative i32 (bit pattern >= 0x80000000). x == 2^31 mod 2^32 means bit pattern 0x80000000 = INT_MIN. x == 0 means bit pattern 0, not negative. So x<0 AND (0-x==x) iff x == INT_MIN. 
+
+But we already compute local1 = 0 - x (i32). For x<0:
+- if x == INT_MIN: local1 = 0 - x = 0x80000000 (bit pattern) = -2147483648 (as signed). We want to detect this. local1 == x? local1 = -2147483648, x = -2147483648, equal. But simpler: detect INT_MIN by checking local1 == x? That needs local.get0 again and i32.eq. Hmm.
+- Alternatively, detect INT_MIN by checking local1 == x (i.e., 0 - x == x). That requires local.get 0 and i32.eq. Doable.
+
+But wait, maybe simpler: detect INT_MIN directly by comparing x to 0x80000000? Can't encode. But we can detect INT_MIN by: x < 0 AND (0 - x == x). Let's compute:
+In x<0 branch:
+```
+i32.const 0
+local.get 0
+i32.sub           ; local1? no, result on stack = 0 - x = -x (wrapping)
+local.set 1       ; local1 = -x (wrapping; for INT_MIN, = -2147483648)
+local.get 1       ; push local1
+local.get 0       ; push x
+i32.eq            ; push (local1 == x)
+if
+  i32.const 47
+  local.set 2
+  br 2
+end
+```
+Now for INT_MIN: local1 = 0 - x = 0 - (-2147483648) = 2147483648 (wrapping to -2147483648). local1 == x? local1 = -2147483648, x = -2147483648, equal -> true. Enter INT_MIN branch -> result 47. Good. For normal negative x (e.g., -907): local1 = 0 - (-907) = 907. local1 == x? 907 == -907? false. Skip INT_MIN branch. local1 = 907 (valid magnitude). Good.
+
+For x >= 0: local1 = x (valid). Good.
+
+But note: for INT_MIN, local1 = -2147483648 (bit pattern 0x80000000), and we br to block end (skip loop). local2 = 47. Good. The loop is skipped, so local1's invalid value doesn't matter.
+
+Now also need to double-check the x<0 branch stack discipline after the fix:
+```
+if (x<0)
+  i32.const 0   ; push 0
+  local.get 0   ; push x
+  i32.sub       ; push 0 - x = -x (wrapping)
+  local.set 1   ; local1 = -x
+  local.get 1   ; push local1
+  local.get 0   ; push x
+  i32.eq        ; push (local1 == x)
+  if
+    i32.const 47
+    local.set 2
+    br 2
+  end
+else
+  local.get 0
+  local.set 1
+end
+```
+Stack discipline: if (x<0) consumes cond; entering if with stack []. Inside: i32.const0 ([0]), local.get0 ([0,x]), i32.sub ([0-x]) -> [neg]. local.set1 (pops neg; stack []). local.get1 ([neg]), local.get0 ([neg, x]), i32.eq ([cond]), if (consumes cond; stack []), i32.const47 ([47]), local.set2 (pops 47; stack []), br2 (stack []). Good. Else: local.get0 ([x]), local.set1 (pops; stack []). end. Good.
+
+But wait: i32.eq opcode = 0x46 (need confirm). I'm fairly confident i32.eq = 0x46. Alternatively, use i32.eqz on (local1 XOR x)? No. Or use i32.eqz? We need (local1 == x). Could instead compute (0 - x) and compare to x. Use i32.eq (0x46). Let's verify i32.eq = 0x46. Earlier: i32.eqz=0x45, i32.eq=0x46. Yes.
+
+Alternatively, detect INT_MIN more simply: x < 0 AND (local1 == x). We can avoid i32.eq by noting local1 == x iff local1 == x; but we can also detect INT_MIN by checking x == INT_MIN via a different route. Hmm, i32.eq is fine.
+
+Actually, maybe even simpler: detect INT_MIN by checking x < 0 AND x == 0x80000000. Since x is i32, x == 0x80000000 iff x is negative AND (x & 0x7fffffff) == 0? Not simpler. Keep i32.eq.
+
+Wait, there's an even simpler detection: INT_MIN is the only negative x with -x == x (in wrapping i32). So x<0 AND (0-x == x). We compute 0-x into local1. Good.
+
+Now, also reconsider: For x<0, after the inner if (INT_MIN), we fall through to after outer if. local1 = -x (magnitude) for non-INT_MIN. Good. The inner if has no else (empty else). Good.
+
+Now recompute instruction list with fix.
+
+Revised body instructions (items):
+1. block: 02 40
+2. local.get 0: 20 00
+3. i32.const 0: 41 00
+4. i32.lt_s: 48
+5. if: 04 40
+6.   i32.const 0: 41 00
+7.   local.get 0: 20 00
+8.   i32.sub: 54
+9.   local.set 1: 21 01
+10.   local.get 1: 20 01
+11.   local.get 0: 20 00
+12.   i32.eq: 46
+13.   if: 04 40
+14.     i32.const 47: 41 2f
+15.     local.set 2: 21 02
+16.     br 2: 06 02
+17.   else: 05
+18.   end: 0b
+19. else: 05
+20.   local.get 0: 20 00
+21.   local.set 1: 21 01
+22. end: 0b
+23. i32.const 0: 41 00
+24. local.set 2: 21 02
+25. loop: 03 40
+26.   local.get 1: 20 01
+27.   i32.eqz: 45
+28.   br_if 1: 07 01
+29.   local.get 1: 20 01
+30.   i32.const 10: 41 0a
+31.   i32.rem_u: 59
+32.   local.get 2: 20 02
+33.   i32.add: 53
+34.   local.set 2: 21 02
+35.   local.get 1: 20 01
+36.   i32.const 10: 41 0a
+37.   i32.div_u: 57
+38.   local.set 1: 21 01
+39.   br 0: 06 00
+40. end: 0b
+41. end: 0b
+42. local.get 2: 20 02
+43. end: 0b
+
+Count bytes:
+locals (3) + instructions.
+Let's sum instruction bytes:
+1 block 2
+2 local.get0 2 ->4
+3 const0 2 ->6
+4 lt_s 1 ->7
+5 if 2 ->9
+6 const0 2 ->11
+7 local.get0 2 ->13
+8 sub 1 ->14
+9 local.set1 2 ->16
+10 local.get1 2 ->18
+11 local.get0 2 ->20
+12 eq 1 ->21
+13 if 2 ->23
+14 const47 2 ->25
+15 local.set2 2 ->27
+16 br2 2 ->29
+17 else 1 ->30
+18 end 1 ->31
+19 else 1 ->32
+20 local.get0 2 ->34
+21 local.set1 2 ->36
+22 end 1 ->37
+23 const0 2 ->39
+24 local.set2 2 ->41
+25 loop 2 ->43
+26 local.get1 2 ->45
+27 eqz 1 ->46
+28 br_if1 2 ->48
+29 local.get1 2 ->50
+30 const10 2 ->52
+31 rem_u 1 ->53
+32 local.get2 2 ->55
+33 add 1 ->56
+34 local.set2 2 ->58
+35 local.get1 2 ->60
+36 const10 2 ->62
+37 div_u 1 ->63
+38 local.set1 2 ->65
+39 br0 2 ->67
+40 end 1 ->68
+41 end 1 ->69
+42 local.get2 2 ->71
+43 end 1 ->72
+
+Instruction bytes = 72. Body = locals (3) + 72 = 75 bytes. Size = 75 = 0x4b. Interesting, 75 again (coincidence). Code entry = 1 (size) + 75 = 76 bytes. Code section contents = 1 (count) + 76 = 77 bytes. Size = 77 = 0x4d.
+
+Wait recompute: body = locals (3) + instruction bytes (72) = 75. Code entry = size (1 byte, 0x4b) + body (75) = 76. Code section contents = count (1 byte 0x01) + code entry (76) = 77 bytes. Section size = 77 = 0x4d.
+
+Hold on, let me re-add instruction bytes carefully. I'll recount by item sizes:
+1 block: 2 (cum 2)
+2 local.get0: 2 (4)
+3 const0: 2 (6)
+4 lt_s: 1 (7)
+5 if: 2 (9)
+6 const0: 2 (11)
+7 local.get0: 2 (13)
+8 sub: 1 (14)
+9 local.set1: 2 (16)
+10 local.get1: 2 (18)
+11 local.get0: 2 (20)
+12 eq: 1 (21)
+13 if: 2 (23)
+14 const47: 2 (25)
+15 local.set2: 2 (27)
+16 br2: 2 (29)
+17 else: 1 (30)
+18 end: 1 (31)
+19 else: 1 (32)
+20 local.get0: 2 (34)
+21 local.set1: 2 (36)
+22 end: 1 (37)
+23 const0: 2 (39)
+24 local.set2: 2 (41)
+25 loop: 2 (43)
+26 local.get1: 2 (45)
+27 eqz: 1 (46)
+28 br_if1: 2 (48)
+29 local.get1: 2 (50)
+30 const10: 2 (52)
+31 rem_u: 1 (53)
+32 local.get2: 2 (55)
+33 add: 1 (56)
+34 local.set2: 2 (58)
+35 local.get1: 2 (60)
+36 const10: 2 (62)
+37 div_u: 1 (63)
+38 local.set1: 2 (65)
+39 br0: 2 (67)
+40 end: 1 (68)
+41 end: 1 (69)
+42 local.get2: 2 (71)
+43 end: 1 (72)
+Yes 72. Body = 3+72 = 75. Size 75 = 0x4b.
+
+Now code section:
+contents = count (1) + size byte (1) + body (75) = 77. Wait code entry = size u32 LEB128 (1 byte, since 75<128) + body (75) = 76 bytes. contents = count u32 LEB128 (1 byte) + code entry (76) = 77 bytes. size = 77 = 0x4d.
+
+Hmm wait: size u32 LEB128 for body size 75 = single byte 0x4b (75). Yes.
+
+Now assemble full hex with corrected instructions.
+
+Full module:
+
+magic: 00 61 73 6d
+version: 01 00 00 00
+
+Section type (id 1): 01 06 01 60 01 7f 01 7f
+Section function (id 3): 03 02 01 00
+Section export (id 7): 07 0d 01 09 64 69 67 69 74 5f 73 75 6d 00 00
+Section code (id 10): 0a 4d 01 4b [body 75 bytes]
+
+Body (75 bytes):
+locals: 01 02 7f
+then instructions:
+02 40 (block)
+20 00 (local.get0)
+41 00 (const0)
+48 (lt_s)
+04 40 (if)
+41 00 (const0)
+20 00 (local.get0)
+54 (sub)
+21 01 (local.set1)
+20 01 (local.get1)
+20 00 (local.get0)
+46 (eq)
+04 40 (if)
+41 2f (const47)
+21 02 (local.set2)
+06 02 (br2)
+05 (else)
+0b (end)
+05 (else)
+20 00 (local.get0)
+21 01 (local.set1)
+0b (end)
+41 00 (const0)
+21 02 (local.set2)
+03 40 (loop)
+20 01 (local.get1)
+45 (eqz)
+07 01 (br_if1)
+20 01 (local.get1)
+41 0a (const10)
+59 (rem_u)
+20 02 (local.get2)
+53 (add)
+21 02 (local.set2)
+20 01 (local.get1)
+41 0a (const10)
+57 (div_u)
+21 01 (local.set1)
+06 00 (br0)
+0b (end)
+0b (end)
+20 02 (local.get2)
+0b (end)
+
+Let's count body bytes by grouping:
+locals: 01 02 7f = 3
+block 02 40 =2 (5)
+local.get0 20 00 =2 (7)
+const0 41 00 =2 (9)
+lt_s 48 =1 (10)
+if 04 40 =2 (12)
+const0 41 00 =2 (14)
+local.get0 20 00 =2 (16)
+sub 54 =1 (17)
+local.set1 21 01 =2 (19)
+local.get1 20 01 =2 (21)
+local.get0 20 00 =2 (23)
+eq 46 =1 (24)
+if 04 40 =2 (26)
+const47 41 2f =2 (28)
+local.set2 21 02 =2 (30)
+br2 06 02 =2 (32)
+else 05 =1 (33)
+end 0b =1 (34)
+else 05 =1 (35)
+local.get0 20 00 =2 (37)
+local.set1 21 01 =2 (39)
+end 0b =1 (40)
+const0 41 00 =2 (42)
+local.set2 21 02 =2 (44)
+loop 03 40 =2 (46)
+local.get1 20 01 =2 (48)
+eqz 45 =1 (49)
+br_if1 07 01 =2 (51)
+local.get1 20 01 =2 (53)
+const10 41 0a =2 (55)
+rem_u 59 =1 (56)
+local.get2 20 02 =2 (58)
+add 53 =1 (59)
+local.set2 21 02 =2 (61)
+local.get1 20 01 =2 (63)
+const10 41 0a =2 (65)
+div_u 57 =1 (66)
+local.set1 21 01 =2 (68)
+br0 06 00 =2 (70)
+end 0b =1 (71)
+end 0b =1 (72)
+local.get2 20 02 =2 (74)
+end 0b =1 (75)
+Body = 75 bytes. Good.
+
+Now verify the INT_MIN simulation with the fix:
+x = -2147483648 (bit pattern 0x80000000). 
+local.get0 -> [x]. const0 -> [x,0]. lt_s -> (x < 0)? x is negative -> true (1). if (x<0) cond true -> enter.
+Inside x<0 branch:
+const0 -> [0]. local.get0 -> [0, x]. sub -> 0 - x = -x. In i32: 0 - (-2147483648) = 2147483648 (wrapping) = bit pattern 0x80000000 = -2147483648 (as signed). So neg = -2147483648 (bit pattern 0x80000000). local.set1 -> local1 = -2147483648 (bit pattern 0x80000000). local.get1 -> [neg]. local.get0 -> [neg, x]. eq -> (neg == x)? neg = -2147483648, x = -2147483648, equal -> true (1). if (cond true) -> enter.
+i32.const 47 -> [47]. local.set2 -> local2 = 47. br 2 -> branch to block end. Stack [] (after local.set2). Jump to end of block. After block: local.get2 -> [47]. end. Result 47. Correct!
+
+Check normal negative x = -907:
+x<0 true. const0 -> [0]. local.get0 -> [0, -907]. sub -> 0 - (-907) = 907. local.set1 -> local1 = 907. local.get1 -> [907]. local.get0 -> [907, -907]. eq -> (907 == -907)? false (0). if not taken (else empty). end inner if. end outer if (x<0 branch done). 
+sum: const0; local.set2 (local2=0). loop: local.get1 (907); eqz -> (907==0)? false (0). br_if 1 not taken. body: local.get1 (907); const10; rem_u -> 907%10 = 7. local.get2 (0); add -> 7. local.set2 -> local2=7. local.get1 (907); const10; div_u -> 90. local.set1 -> local1=90. br 0 -> loop.
+iter2: local.get1 (90); eqz -> false. body: rem_u -> 90%10 =0. local.get2 (7); add -> 7. local.set2=7. local.get1 (90); const10; div_u -> 9. local.set1=9. br0.
+iter3: local.get1 (9); eqz -> false. body: rem_u -> 9. local.get2 (7); add -> 16. local.set2=16. local.get1 (9); const10; div_u -> 0. local.set1=0. br0.
+iter4: local.get1 (0); eqz -> true. br_if 1 -> exit block. Result local2=16. Correct.
+
+Check x = 0:
+x<0 false. else branch: local.get0 (0); local.set1 (local1=0). end outer if. sum=0. loop: local.get1 (0); eqz -> true. br_if 1 -> exit. Result local2=0. Correct.
+
+Check x = 2147483647 (max):
+x>=0. local1=2147483647. sum=0.
+iter1: n=2147483647; eqz false. rem_u = 2147483647%10 = 7 (last digit 7). sum=7. div_u = 214748364 (214748364.7 floor). local1=214748364.
+iter2: n=214748364; eqz false. rem_u = 4 (last digit 4). sum=11. div_u = 21474836 (21474836.4 floor 21474836). local1=21474836.
+iter3: n=21474836; rem_u = 6 (last digit 6). sum=17. div_u = 2147483 (2147483.6 floor 2147483). local1=2147483.
+iter4: n=2147483; rem_u = 3 (last digit 3). sum=20. div_u = 214748 (214748.3 floor 214748). local1=214748.
+iter5: n=214748; rem_u = 8 (last digit 8). sum=28. div_u = 21474 (21474.8 floor 21474). local1=21474.
+iter6: n=21474; rem_u = 4 (last digit 4). sum=32. div_u = 2147 (2147.4 floor 2147). local1=2147.
+iter7: n=2147; rem_u = 7 (last digit 7). sum=39. div_u = 214 (214.7 floor 214). local1=214.
+iter8: n=214; rem_u = 4 (last digit 4). sum=43. div_u = 21 (21.4 floor 21). local1=21.
+iter9: n=21; rem_u = 1 (last digit 1). sum=44. div_u = 2 (2.1 floor 2). local1=2.
+iter10: n=2; rem_u = 2. sum=46. div_u = 0 (0.2 floor 0). local1=0. br0.
+iter11: n=0; eqz true; br_if 1 -> exit. Result 46.
+Expected digit sum of 2147483647 = 2+1+4+7+4+8+3+6+4+7 = let's sum: 2+1=3; +4=7; +7=14; +4=18; +8=26; +3=29; +6=35; +4=39; +7=46. Yes 46. Good.
+
+Check digit_sum(1) =1: x=1>=0. local1=1. sum=0. iter1: n=1; eqz false. rem_u=1. sum=1. div_u=0. local1=0. br0. iter2: n=0; eqz true; exit. Result 1. Good.
+
+Check digit_sum(1234567890) with fixed code: x>=0, local1=1234567890. sum=0.
+iter1: n=1234567890; rem_u = 0 (last digit 0). sum=0. div_u = 123456789. local1=123456789.
+iter2: rem_u = 9 (last digit 9). sum=9. div_u = 12345678 (12345678.9 floor 12345678). local1=12345678.
+iter3: rem_u = 8 (last digit 8). sum=17. div_u = 1234567 (1234567.8 floor). local1=1234567.
+iter4: rem_u = 7. sum=24. div_u = 123456 (123456.7 floor). local1=123456.
+iter5: rem_u = 6. sum=30. div_u = 12345 (12345.6 floor). local1=12345.
+iter6: rem_u = 5. sum=35. div_u = 1234 (1234.5 floor). local1=1234.
+iter7: rem_u = 4. sum=39. div_u = 123 (123.4 floor). local1=123.
+iter8: rem_u = 3. sum=42. div_u = 12 (12.3 floor). local1=12.
+iter9: rem_u = 2. sum=44. div_u = 1 (1.2 floor). local1=1.
+iter10: rem_u = 1. sum=45. div_u = 0 (0.1 floor). local1=0. br0.
+iter11: n=0; eqz true; exit. Result 45. Good.
+
+Now double check the `if` encoding: `if` opcode 0x04, blocktype 0x40, then instr*, then `else` 0x05, then instr*, then `end` 0x0b. For inner if (INT_MIN), instr* = i32.const47, local.set2, br2 (3 instructions), then else (0x05), then instr* empty, then end (0x0b). Good. For outer if (x<0), instr* = (const0, local.get0, sub, local.set1, local.get1, local.get0, eq, if...end) (the inner if including its end), then else, then instr* = local.get0, local.set1, then end. Good.
+
+Wait: the inner if (INT_MIN) is a structured instruction nested inside the outer if's then-branch. In the binary encoding, the outer if's then-branch instr* includes the inner if (with its own else/end). That's fine; nested structured instructions are just sequences of instructions. Good.
+
+Now, label indices: At br 2 (INT_MIN branch), enclosing structured instructions: inner if (B), outer if (A), block (outermost). Label index 0 = inner if (B), 1 = outer if (A), 2 = block. br 2 -> block. Correct. At br_if 1 (loop), enclosing: loop (0), block (1). br_if 1 -> block. Correct. At br 0 (loop back-edge), enclosing loop (0), block(1). br 0 -> loop. Correct.
+
+Now check the `end` for the loop and block: After loop body, `end` (0x0b) closes loop. Then `end` (0x0b) closes block. Then local.get2, end (closes function). Good.
+
+Now, one concern: `br_if 1` inside loop jumps to block end. When it jumps, it exits the loop and the block. The stack at block end must match block type (void). At br_if, after consuming cond, stack is empty (we had local.get1 (n), eqz -> cond; br_if pops cond -> stack empty). Good.
+
+Now, the function result: local.get2 at the end pushes i32; function end. The function type is (i32) -> (i32). Good. The result is on the stack. Good.
+
+Now, validation concerns: The `if` with void blocktype requires that the stack is empty at the start (after consuming condition) and empty at the end (before else/end). In our outer if, after the x<0 branch (which ends with inner if/end, stack []), then else, then x>=0 branch (local.get0, local.set1, stack []), then end. Stack empty throughout. Good. In inner if, after then-branch (i32.const47, local.set2, br2 — stack []), else (empty), end. Stack empty. Good.
+
+The `loop` with void blocktype: at loop start, stack [] (we're at block level, after init sum, stack []). Inside loop, the body maintains stack [] at the end (after br0). The loop can also exit via br_if (to block) — that's fine. After loop end (not reached normally), stack []. Good.
+
+One more: the `if` opcode blocktype void (0x40) means the if yields no value; the condition is on the stack. Correct.
+
+Now, the function body's final `end` (0x0b) terminates the function. The function type has result i32; the stack has 1 value (i32) at end. Good.
+
+Now assemble final hex. Let's write it carefully.
+
+Magic+version:
+00 61 73 6d 01 00 00 00
+
+Section type:
+01 06 01 60 01 7f 01 7f
+
+Section function:
+03 02 01 00
+
+Section export:
+07 0d 01 09 64 69 67 69 74 5f 73 75 6d 00 00
+
+Section code:
+0a 4d 01 4b 01 02 7f 02 40 20 00 41 00 48 04 40 41 00 20 00 54 21 01 20 01 20 00 46 04 40 41 2f 21 02 06 02 05 0b 05 20 00 21 01 0b 41 00 21 02 03 40 20 01 45 07 01 20 01 41 0a 59 20 02 53 21 02 20 01 41 0a 57 21 01 06 00 0b 0b 20 02 0b
+
+Let's count the code section bytes after "0a 4d": contents should be 77 bytes. Contents = 01 (count) + 4b (size) + body(75) = 77. Body = 75. Let's verify body bytes count in the hex: after "01 4b", body hex = 
+01 02 7f (locals 3)
+02 40 (2) ->5
+20 00 (2)->7
+41 00 (2)->9
+48 (1)->10
+04 40 (2)->12
+41 00 (2)->14
+20 00 (2)->16
+54 (1)->17
+21 01 (2)->19
+20 01 (2)->21
+20 00 (2)->23
+46 (1)->24
+04 40 (2)->26
+41 2f (2)->28
+21 02 (2)->30
+06 02 (2)->32
+05 (1)->33
+0b (1)->34
+05 (1)->35
+20 00 (2)->37
+21 01 (2)->39
+0b (1)->40
+41 00 (2)->42
+21 02 (2)->44
+03 40 (2)->46
+20 01 (2)->48
+45 (1)->49
+07 01 (2)->51
+20 01 (2)->53
+41 0a (2)->55
+59 (1)->56
+20 02 (2)->58
+53 (1)->59
+21 02 (2)->61
+20 01 (2)->63
+41 0a (2)->65
+57 (1)->66
+21 01 (2)->68
+06 00 (2)->70
+0b (1)->71
+0b (1)->72
+20 02 (2)->74
+0b (1)->75
+Body = 75. Good. contents = 1 (count) +1 (size) +75 = 77. size = 77 = 0x4d. Good.
+
+Now, let's double-check section size values:
+- Type: id 01, size 06, contents 6. 01 06 [6 bytes]. contents = 01 60 01 7f 01 7f (6). Good.
+- Function: id 03, size 02, contents 2. 03 02 [2 bytes]. contents = 01 00 (2). Good.
+- Export: id 07, size 0d (13), contents 13. 07 0d [13 bytes]. contents = 01 09 64 69 67 69 74 5f 73 75 6d 00 00 (13). Good.
+- Code: id 0a, size 4d (77), contents 77. 0a 4d [77 bytes]. contents = 01 4b [body 75] (1+1+75=77). Good.
+
+Now, one more validation: the export section index u32 LEB128 = 0 -> 0x00. kind = function = 0x00. Good.
+
+Now, the type section: functype 0x60, param count 0x01, param type 0x7f (i32), result count 0x01, result type 0x7f (i32). Good.
+
+Function section: count 0x01, type index 0x00. Good.
+
+Let's also double-check the i32.const encoding for 10 and 47: positive, LEB128: 10 = 0x0a, 47 = 0x2f. Good. For 0: 0x00. Good.
+
+Now, are there any issues with the `else` opcode being required? Yes, `if` requires else. We included it. For inner if, after then-branch we have else (0x05) then end (0x0b) with empty else. Good. For outer if, after then-branch (which ends with inner if's end), we have else (0x05), then x>=0 branch instructions (local.get0, local.set1), then end (0x0b). Good.
+
+Now, one subtle validation: In the outer if's then-branch, we have nested inner if. The then-branch instr* = [const0, local.get0, sub, local.set1, local.get1, local.get0, eq, inner-if]. The inner-if is a structured instruction (block-like). That's valid.
+
+Also, the `br 2` inside inner if targets the block. But the block is the outermost structured instruction; is it valid to br to the outermost block from inside nested ifs? Yes, br to any enclosing label. Good.
+
+Now, let's reconsider the `br_if` label index 1: it targets the outermost block (label index 1, since loop is 0, block is 1). At br_if, enclosing structured instructions: loop (0), block (1). Yes br_if 1 -> block. Good.
+
+Now final hex. I'll produce the full hex as pairs. Let's write it out carefully. I'll write the entire module as one space-separated list.
+
+00 61 73 6d 01 00 00 00 01 06 01 60 01 7f 01 7f 03 02 01 00 07 0d 01 09 64 69 67 69 74 5f 73 75 6d 00 00 0a 4d 01 4b 01 02 7f 02 40 20 00 41 00 48 04 40 41 00 20 00 54 21 01 20 01 20 00 46 04 40 41 2f 21 02 06 02 05 0b 05 20 00 21 01 0b 41 00 21 02 03 40 20 01 45 07 01 20 01 41 0a 59 20 02 53 21 02 20 01 41 0a 57 21 01 06 00 0b 0b 20 02 0b
+
+Let's count the total bytes to verify: magic 4 + version 4 = 8. Type section: 1+1+6 = 8 (total 16). Function section: 1+1+2 = 4 (total 20). Export section: 1+1+13 = 15 (total 35). Code section: 1+1+77 = 79 (total 114). Total = 8+8+4+15+79 = 114 bytes. Let's verify by counting the hex list. I'll count the hex pairs in the final string.
+
+Let me count systematically by sections:
+Magic+version: 00 61 73 6d 01 00 00 00 = 8 bytes.
+Type: 01 06 01 60 01 7f 01 7f = 8 bytes. Running 16.
+Function: 03 02 01 00 = 4 bytes. Running 20.
+Export: 07 0d 01 09 64 69 67 69 74 5f 73 75 6d 00 00 = let's count: 07(1) 0d(2) 01(3) 09(4) 64(5) 69(6) 67(7) 69(8) 74(9) 5f(10) 73(11) 75(12) 6d(13) 00(14) 00(15) = 15 bytes. Running 35.
+Code: 0a 4d 01 4b 01 02 7f ... Let's count: 0a(1) 4d(2) 01(3) 4b(4) then body(75) = 4 + 75 = 79 bytes. Running 35+79 = 114. Good.
+
+Let me verify body byte count in the final string by counting pairs after "4b":
+01 02 7f (3)
+02 40 (5)
+20 00 (7)
+41 00 (9)
+48 (10)
+04 40 (12)
+41 00 (14)
+20 00 (16)
+54 (17)
+21 01 (19)
+20 01 (21)
+20 00 (23)
+46 (24)
+04 40 (26)
+41 2f (28)
+21 02 (30)
+06 02 (32)
+05 (33)
+0b (34)
+05 (35)
+20 00 (37)
+21 01 (39)
+0b (40)
+41 00 (42)
+21 02 (44)
+03 40 (46)
+20 01 (48)
+45 (49)
+07 01 (51)
+20 01 (53)
+41 0a (55)
+59 (56)
+20 02 (58)
+53 (59)
+21 02 (61)
+20 01 (63)
+41 0a (65)
+57 (66)
+21 01 (68)
+06 00 (70)
+0b (71)
+0b (72)
+20 02 (74)
+0b (75)
+75 bytes. 
+
+Now, the final answer must be only the hex pairs. Let's also reconsider whether the wasm binary format uses LEB128 for section size. I'm fairly confident section size is LEB128. Let me double check with known wasm bytes: A minimal valid module `(module (func))` encodes as: magic(4) version(4) type section? Actually `(module (func))` has type section with one empty functype, function section with one entry, code section with one body (locals=0, end). Bytes: `00 61 73 6d 01 00 00 00 01 04 01 60 00 00 03 02 01 00 0a 04 01 02 00 0b`? Let's see: type section: id 01, size 04, contents = 01 60 00 00 (count=1, functype=0x60, param count=0, result count=0) = 4 bytes. size=4. function section: id 03, size 02, contents = 01 00 (count=1, type idx=0) = 2 bytes. code section: id 0a, size 04, contents = 01 02 00 0b? code entry = size 02 (body=00 0b? locals=0 (01? no) ...). Hmm body = locals vec (count=0 -> 00) + end (0b) = 2 bytes (00 0b). code entry = size 02 + body (00 0b) = 3 bytes? Wait code entry = size (1 byte, 02) + body (2 bytes: 00 0b) = 3 bytes. contents = count (01) + code entry (3) = 4 bytes. size=4. So code section = 0a 04 01 02 00 0b? contents = 01 02 00 0b = 4 bytes: count=01, size=02, body=00 0b. Yes. That matches `0a 04 01 02 00 0b`. I recall this looks right. Good, LEB128 for sizes confirmed.
+
+Also, the version bytes: `01 00 00 00` (4 bytes) — fixed, not LEB128. Yes.
+
+Now, I realize I should double check the i32.eqz opcode (0x45) and i32.eq (0x46), i32.lt_s (0x48), i32.sub (0x54), i32.add (0x53), i32.rem_u (0x59), i32.div_u (0x57). Let me verify by recalling the wasm opcode table once more. I'm fairly confident but let me sanity-check against a known: `i32.add` is 0x6a? Hmm. Actually I have a memory that `i32.add` might be 0x6a in the "reference types" or "SIMD" extension? No. In the MVP numeric instructions, the layout I used (i32.eqz=0x45 ... i32.add=0x53) is the standard. Let me verify by a concrete known: `i32.const` = 0x41 (confident). `i64.const` = 0x42. `f32.const` = 0x43? Actually I recall `f32.const` = 0x43? Hmm, maybe `f32.const` = 0x43 and `f64.const` = 0x44. Then `i32.eqz` = 0x45. This is consistent with the spec where numeric instructions are ordered: consts (i32,i64,f32,f64) then comparisons. Yes.
+
+Actually, I want to be extra careful. Let me recall from a concrete wasm: `(i32.add (local.get 0) (local.get 1))` in a function — the body bytes would be `20 00 20 01 53`? I think i32.add = 0x53? Hmm, I've also seen 0x6a for i32.add? Let's settle: The numeric instructions in the spec are listed in order:
+```
+i32.const (0x41), i64.const (0x42), f32.const (0x43), f64.const (0x44),
+i32.eqz (0x45), i32.eq (0x46), i32.ne (0x47), i32.lt_s (0x48), i32.lt_u (0x49), i32.gt_s (0x4a), i32.gt_u (0x4b), i32.le_s (0x4c), i32.le_u (0x4d), i32.ge_s (0x4e), i32.ge_u (0x4f),
+i32.clz (0x50), i32.ctz (0x51), i32.popcnt (0x52),
+i32.add (0x53), i32.sub (0x54), i32.mul (0x55), i32.div_s (0x56), i32.div_u (0x57), i32.rem_s (0x58), i32.rem_u (0x59),
+i32.and (0x5a), i32.or (0x5b), i32.xor (0x5c),
+i32.rotl (0x5d), i32.rotr (0x5e),
+i32.shift_left (0x5f), i32.shift_right_s (0x60), i32.shift_right_u (0x61),
+i64.eqz (0x62), ...
+```
+Yes, this matches my values. I'm confident: i32.eqz=0x45, i32.eq=0x46, i32.lt_s=0x48, i32.add=0x53, i32.sub=0x54, i32.div_u=0x57, i32.rem_u=0x59. Good.
+
+Now, the final answer should be only the bytes as pairs. Let's produce it.
+
+Wait, I should double-check the export name bytes once more: "digit_sum". d=0x64, i=0x69, g=0x67, i=0x69, t=0x74, _=0x5f, s=0x73, u=0x75, m=0x6d. Yes: 64 69 67 69 74 5f 73 75 6d. Good. Length 9 (0x09). Good.
+
+Now, one more check: the export section's index u32 LEB128 = 0 -> 0x00. The export record: name len 0x09, name (9), kind 0x00 (function), index 0x00. Good.
+
+Now, final hex string. Let me assemble it one more time cleanly and ensure no typos.
+
+00 61 73 6d 01 00 00 00
+01 06 01 60 01 7f 01 7f
+03 02 01 00
+07 0d 01 09 64 69 67 69 74 5f 73 75 6d 00 00
+0a 4d 01 4b 01 02 7f 02 40 20 00 41 00 48 04 40 41 00 20 00 54 21 01 20 01 20 00 46 04 40 41 2f 21 02 06 02 05 0b 05 20 00 21 01 0b 41 00 21 02 03 40 20 01 45 07 01 20 01 41 0a 59 20 02 53 21 02 20 01 41 0a 57 21 01 06 00 0b 0b 20 02 0b
+
+That's the final. Let me make sure the code section's body starts with "01 02 7f" (locals). After "0a 4d 01 4b" we have body. Good.
+
+Double-check code section size 0x4d = 77. Contents = 01 4b [75 bytes] = 1+1+75 = 77. Good.
+
+I'm confident. Let's write the final answer with only hex pairs.
+
+Actually, wait: I want to reconsider the `if` instruction's `else` requirement once more. Is the `else` opcode mandatory in binary? Let me recall the spec's binary format for `if`:
+`if = 0x04 blocktype instr* else instr* end`. Yes, `else` (0x05) is mandatory. Good. And for `loop`/`block`, no else. Good.
+
+Also, is the blocktype for void `0x40`? In the spec, blocktype is `0x40` for "empty" (void) — yes, the "void" blocktype is 0x40 (64). Actually I recall the void blocktype is `0x40` and it's encoded as a single byte. Good.
+
+One more: the function body's `locals` vec: count of local declarations = 1 (one entry). Each entry = count of locals + type. We have one entry with count=2 (locals 1 and 2) and type i32 (0x7f). So locals = 01 02 7f (3 bytes). Good. Locals 1 and 2 are both i32. local 0 is param (i32). Good.
+
+Now, are we allowed to have exactly one function and export only it? Yes. No imports. No memory. No start. Good.
+
+I think we're done. Let's produce the final answer.
+
+Actually, let me reconsider whether the `if` then-branch in the outer if is valid: it contains a nested `if` which contains `br 2`. The nested `if` has blocktype 0x40 (void). Inside it, the then-branch pushes 47, sets local2, br2. After br2 (which jumps out), the else and end are present but not executed. The then-branch's stack at end (before else) — since br2 jumps out, the stack at the else point is irrelevant? Actually validation is static: the then-branch must leave a stack matching the if's blocktype (void) at its end (before else). The then-branch ends with `br 2`, which is a control-flow instruction that never returns (br to outer label). In validation, `br` to an outer label means the stack is "unreachable" after br, so the if's then-branch is considered to end with any stack? Hmm. Validation of `if`: the then-branch must be valid with stack matching the blocktype at the end. If the last instruction is `br` (unconditional branch to outer label), the stack after `br` is empty (br pops nothing? br consumes nothing but branches; the validation treats br as producing an "unreachable" stack). Actually, in wasm validation, `br` to an outer label makes the rest of the block unreachable, so the stack at the end of the then-branch is "unreachable" (any stack). So the if's then-branch ending with br is valid. Good.
+
+Similarly, the outer if's then-branch ends with the inner if (whose end is a structured instruction). The inner if (valid) leaves stack []. Good.
+
+The outer if's else-branch (x>=0): local.get0, local.set1 -> stack []. Good.
+
+Now the loop: inside loop, the body ends with `br 0` (unconditional). After br0, the stack is unreachable; the loop's end (0x0b) is after br0, so the loop's then/body is considered ending with unreachable stack. Valid. Good.
+
+Everything checks out. Final answer below.
+
+Let me also double-check that the export section id 7 comes before code section id 10, and after function section id 3. Yes: 1 (type) < 3 (function) < 7 (export) < 10 (code). Good.
+
+Final answer: only hex pairs.

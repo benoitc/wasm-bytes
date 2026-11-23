@@ -65,18 +65,21 @@ parse() ->
                                           "    2: wasm trap: all fuel consumed by WebAssembly\n">>)),
     ?assertMatch({error, _}, wb_wasmtime:parse(0, ~"not a number\n")).
 
-%% Whatever records evidence/runs holds, each one ran the recorded Sonnet
-%% module and passed in both engines.
+%% Whatever records evidence/runs holds, each one ran the module its trial
+%% recorded in module.sha256, and passed in both engines.
 records() ->
-    Want = wb_trace:recorded_sha256(filename:join(root(), ?SONNET)),
+    Paths = filelib:wildcard(filename:join([root(), "evidence", "runs", "*", "*.config"])),
+    ?assert(length(Paths) >= 3),
     [begin
          {ok, Terms} = file:consult(Path),
          R = maps:from_list(Terms),
+         TrialDir = filename:dirname(filename:join(root(), maps:get(reply, R))),
+         Want = wb_trace:recorded_sha256(TrialDir),
          ?assertEqual({Path, Want}, {Path, maps:get(module_sha256, R)}),
          ?assertEqual({Path, pass}, {Path, maps:get(verdict, R)}),
          #{erlang_wasm := #{received_sha256 := E}, wasmtime := #{received_sha256 := W}} = R,
          ?assertEqual({Path, Want, Want}, {Path, E, W})
-     end || Path <- filelib:wildcard(filename:join([root(), "evidence", "runs", "*.config"]))].
+     end || Path <- Paths].
 
 wasmtime_cases() ->
     case wb_wasmtime:find() of
