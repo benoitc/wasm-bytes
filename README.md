@@ -72,6 +72,10 @@ bin/wasm-bytes check digits trials/digits/claude-haiku-5-5-1/reply.txt
 
 REA recovered a small function from the x86 code of DX-Ball, a 1996 game. It turns a horizontal screen position into a stereo pan value for the game's sounds. `screen_pan(0)` returns −500 at the left edge, `screen_pan(320)` returns 0, and `screen_pan(640)` returns 500. We described that recovered behavior to three models and asked each one for the Wasm bytes. Then we gave each model its own accepted bytes and asked it to reverse the stereo. All six replies passed on every position from 0 through 640, in erlang_wasm and in Wasmtime. [Prompt](prompts/pan.txt) · [What REA recovered and what was checked](doc/dx-ball.md)
 
+![Animated replay of the DX-Ball trial. Sonnet writes 76 Wasm bytes from the prompt. As the ball moves right, the stereo pan follows. A second prompt changes one byte, and the same calls now pan left.](doc/media/dx-ball-pan-replay.gif)
+
+Watch the two markers on the second sweep. The ball still moves to the right, but the sound moves left. The number above them is the value returned by `screen_pan(x)`. To hear the difference, run the demo below. [Original reply](trials/pan/claude-sonnet-5-5-1/reply.txt) · [Revision prompt](trials/reverse/claude-sonnet-5-5-1/prompt.txt) · [Revised reply](trials/reverse/claude-sonnet-5-5-1/reply.txt)
+
 To replay the checks of Sonnet's pair, run the command below. It checks the original module again, then the reversed one against it:
 
 ```sh
