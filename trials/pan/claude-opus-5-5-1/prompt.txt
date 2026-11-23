@@ -1,0 +1,36 @@
+Write a complete WebAssembly module in the binary format (the bytes of a
+.wasm file, version 1) and reply with its bytes as hex.
+
+The module implements a function recovered from the x86 code of the game
+DX-Ball (version 1.07, 1996). The game calls it with the horizontal screen
+position of something that makes a sound, such as a brick that was hit, and
+passes the result to its sound routine as a stereo pan value, so that the
+sound comes from that side of the screen.
+
+The module exports one function, named "screen_pan", with one i32 parameter
+and one i32 result:
+
+  screen_pan(x) takes a horizontal screen position x, from 0 at the left
+  edge through 640 at the right edge.
+  It computes, in double-precision floating point: x times 1.5625, then
+  minus 500.0, then times a scale of 1.0.
+  It converts that value to an i32 by truncating toward zero: any fraction
+  is dropped, for negative values as for positive ones.
+  The result goes from -500 at the left edge to 500 at the right edge. A
+  negative value is left of centre, a positive value right of centre.
+
+The module has exactly one function, the exported one, and exports nothing
+else. It has no imports, no memory and no start function.
+
+You write every byte: the magic number and version, every section id, every
+section length, every function body length, every local declaration and
+every instruction. Nothing will be added to your bytes and no length will be
+corrected: the bytes you send are the bytes that run.
+
+Reply with only the bytes, as pairs of hexadecimal digits, for example:
+
+0f a0 7c
+
+Whitespace and line breaks between pairs are allowed. Do not split a pair.
+Do not add anything else: no explanation, no code fence, no 0x prefix, no
+comments.

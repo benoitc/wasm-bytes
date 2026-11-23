@@ -38,11 +38,11 @@ bin/wasm-bytes compare write trials/write/claude-sonnet-5-5-1/reply.txt
 
 ## What a pass covers
 
-For `retry`, the checker calls the function on every status from 100 through 599, plus 28 other integers. These include negative numbers, 32-bit boundaries, and numbers whose low bits match a status of interest. For `digit_sum`, it makes 1,353 calls. They cover 0 through 1000, −1 through −100, powers of ten and their neighbours, the 32-bit limits, and 200 numbers spread over the whole range. Each answer is compared with a reference function written in Erlang from the task description. [Test inputs and reference functions](../src/wb_task.erl)
+For `retry`, the checker calls the function on every status from 100 through 599, plus 28 other integers. These include negative numbers, 32-bit boundaries, and numbers whose low bits match a status of interest. For `screen_pan`, the DX-Ball task, it makes 641 calls, one for every screen position from 0 through 640. For `digit_sum`, it makes 1,353 calls. They cover 0 through 1000, −1 through −100, powers of ten and their neighbours, the 32-bit limits, and 200 numbers spread over the whole range. Each answer is compared with a reference function written in Erlang from the task description. [Test inputs and reference functions](../src/wb_task.erl)
 
 The checker verifies the module's interface before running it. Each call starts with fresh instance state and has a budget of 10,000 fuel units and a 1,000 ms deadline. The checker replaces a worker that hits its deadline. After three deadlines it marks the remaining inputs as untested. [Interface checks](../src/wb_profile.erl) · [Execution limits](../src/wb_exec.erl)
 
-A revision check first rechecks the base against the write task. It compares the new bytes with the base and labels each group of edits by its location in the original module. When both modules run, it also compares their answers on the same inputs. A changed length field in `diff` is a byte edit. An input listed under `changes` is an observable difference in what the program did. [Revision checks](../src/wb_check.erl)
+When many answers are wrong, `first` shows the first wrong input. The wrong inputs are grouped by how far each answer is from the reference. A revision check first rechecks the base against its own task: `write` for `revise`, and `pan` for `reverse`. It compares the new bytes with the base and labels each group of edits by its location in the original module. When both modules run, it also compares their answers on the same inputs. A changed length field in `diff` is a byte edit. An input listed under `changes` is an observable difference in what the program did. [Revision checks](../src/wb_check.erl)
 
 ## Find a worked example
 

@@ -176,9 +176,9 @@ trial_prompts() ->
     Trials = [F || #{kind := trials} = F <- wb_fixture:all(root())],
     ?assert(length([T || #{task := digits} = T <- Trials]) >= 3),
     [case F of
-         #{task := revise, prompt := Prompt} ->
+         #{task := Task, prompt := Prompt} when Task =:= revise; Task =:= reverse ->
              {ok, _, Base} = wb_fixture:base_reply(root(), F),
-             {ok, Rendered} = wasm_bytes:render_revise_prompt(root(), Base),
+             {ok, Rendered} = wasm_bytes:render_prompt(root(), Task, Base),
              ?assertEqual({Label, iolist_to_binary(Rendered)}, {Label, Prompt});
          #{task := Task, prompt := Prompt, config := C} ->
              %% A one-prompt task: the prompt file for its variant, as it is.

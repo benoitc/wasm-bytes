@@ -12,9 +12,13 @@
 %% REPLY is a file, or `-' for standard input.
 -module(wasm_bytes).
 
--export([main/1, run/2, demo/1, render_revise_prompt/2]).
+-export([main/1, run/2, demo/1, render_revise_prompt/2, render_prompt/3]).
 
 -define(PLACEHOLDER, <<"{{MODULE_HEX}}">>).
+
+%% Tasks with one prompt, and tasks that revise another task's reply.
+-define(ONE_PROMPT(T), (T =:= "write" orelse T =:= "digits" orelse T =:= "pan")).
+-define(REVISION(T), (T =:= "revise" orelse T =:= "reverse")).
 
 -spec main([string()]) -> no_return().
 main(Args) ->
@@ -61,31 +65,38 @@ command(["compare", Task, Reply]) ->
     compare(task(Task), Reply, undefined);
 command(["compare", Task, Reply, "--record", Dir]) ->
     compare(task(Task), Reply, Dir);
-command(["check", Task, Reply]) when Task =:= "write"; Task =:= "digits" ->
+command(["check", Task, Reply]) when ?ONE_PROMPT(Task) ->
     R = wb_check:check(task(Task), input(Reply)),
     io:put_chars(wb_report:report(R)),
     exit_code(R);
-command(["check", "revise", Reply, "--base", Base]) ->
-    check_revise(Reply, Base);
-command(["check", "revise", "--base", Base, Reply]) ->
-    check_revise(Reply, Base);
-command(["prompt", Task]) when Task =:= "write"; Task =:= "digits" ->
+command(["check", Task, Reply, "--base", Base]) when ?REVISION(Task) ->
+    check_revise(task(Task), Reply, Base);
+command(["check", Task, "--base", Base, Reply]) when ?REVISION(Task) ->
+    check_revise(task(Task), Reply, Base);
+command(["prompt", Task]) when ?ONE_PROMPT(Task) ->
     io:put_chars(prompt_file(root(), task(Task))),
     0;
-command(["prompt", Task, "--guided"]) when Task =:= "write"; Task =:= "digits" ->
-    {ok, Path} = wb_task:prompt(task(Task), guided),
-    {ok, Bin} = file:read_file(filename:join(root(), Path)),
-    io:put_chars(Bin),
-    0;
-command(["prompt", "revise", "--base", Base]) ->
-    case render_revise_prompt(root(), input(Base)) of
+command(["prompt", Task, "--guided"]) when ?ONE_PROMPT(Task) ->
+    case wb_task:prompt(task(Task), guided) of
+        {ok, Path} ->
+            {ok, Bin} = file:read_file(filename:join(root(), Path)),
+            io:put_chars(Bin),
+            0;
+        {error, no_guided_prompt} ->
+            throw({usage, ["wasm-bytes: the ", Task, " task has no guided prompt"]})
+    end;
+command(["prompt", Task, "--base", Base]) when ?REVISION(Task) ->
+    case render_prompt(root(), task(Task), input(Base)) of
         {ok, Prompt} ->
             io:put_chars(Prompt),
             0;
         {error, Report} ->
-            err(wb_report:base_refused(list_to_binary(Base), Report)),
+            {ok, BaseTask} = wb_task:base(task(Task)),
+            err(wb_report:base_refused(list_to_binary(Base), Report, BaseTask)),
             1
     end;
+command(["pan-demo" | Opts]) ->
+    pan_demo(Opts);
 command(["help"]) ->
     io:put_chars(usage()),
     0;
@@ -96,21 +107,62 @@ usage() ->
     "usage: bin/wasm-bytes replay\n"
     "       bin/wasm-bytes demo\n"
     "       bin/wasm-bytes trace TRIAL-DIRECTORY [--wasm FILE]\n"
-    "       bin/wasm-bytes compare write|revise|digits REPLY [--record DIRECTORY]\n"
-    "       bin/wasm-bytes check write|digits REPLY\n"
-    "       bin/wasm-bytes check revise REPLY --base REPLY\n"
-    "       bin/wasm-bytes prompt write|digits [--guided]\n"
-    "       bin/wasm-bytes prompt revise --base REPLY\n"
+    "       bin/wasm-bytes compare TASK REPLY [--record DIRECTORY]\n"
+    "       bin/wasm-bytes check write|digits|pan REPLY\n"
+    "       bin/wasm-bytes check revise|reverse REPLY --base REPLY\n"
+    "       bin/wasm-bytes prompt write|digits|pan [--guided]\n"
+    "       bin/wasm-bytes prompt revise|reverse --base REPLY\n"
+    "       bin/wasm-bytes pan-demo [--original REPLY --reversed REPLY] [--no-open]\n"
+    "TASK is write, revise, digits, pan or reverse.\n"
     "REPLY is a file holding a model's reply, or - for standard input.\n".
 
-check_revise(Reply, Base) ->
-    case wb_check:check_revision(input(Base), input(Reply)) of
+check_revise(Task, Reply, Base) ->
+    case wb_check:check_revision(Task, input(Base), input(Reply)) of
         {ok, Rev} ->
             io:put_chars(wb_report:revision(Base, Rev)),
             exit_code(maps:get(revised, Rev));
         {error, {base_not_accepted, Report}} ->
-            io:put_chars(wb_report:base_refused(list_to_binary(Base), Report)),
+            {ok, BaseTask} = wb_task:base(Task),
+            io:put_chars(wb_report:base_refused(list_to_binary(Base), Report, BaseTask)),
             1
+    end.
+
+pan_demo(Opts) ->
+    {DefaultOriginal, DefaultReversed} = wb_pan_demo:default_replies(),
+    {Original, Reversed, Open} = pan_demo_opts(Opts, filename:join(root(), DefaultOriginal),
+                                               filename:join(root(), DefaultReversed), true),
+    Out = filename:join([root(), "_build", "pan-demo"]),
+    case wb_pan_demo:build(root(), Original, Reversed, Out) of
+        {ok, Index} ->
+            io:format("  original   ~ts~n  reversed   ~ts~n  page       ~ts~n",
+                      [relative(Original), relative(Reversed), Index]),
+            case Open of
+                true -> open_page(Index);
+                false -> ok
+            end,
+            0;
+        {error, {original_refused, Report}} ->
+            err(wb_report:base_refused(relative(Original), Report, pan)),
+            1;
+        {error, {reversed_refused, Report}} ->
+            err([relative(Reversed), " does not pass the reverse task:\n", wb_report:report(Report)]),
+            1
+    end.
+
+pan_demo_opts([], O, R, Open) -> {O, R, Open};
+pan_demo_opts(["--original", P | Rest], _, R, Open) -> pan_demo_opts(Rest, P, R, Open);
+pan_demo_opts(["--reversed", P | Rest], O, _, Open) -> pan_demo_opts(Rest, O, P, Open);
+pan_demo_opts(["--no-open" | Rest], O, R, _) -> pan_demo_opts(Rest, O, R, false);
+pan_demo_opts(_, _, _, _) -> throw({usage, "wasm-bytes: pan-demo takes --original, --reversed and --no-open"}).
+
+%% The system's own opener, without a shell.
+open_page(Path) ->
+    case [E || E <- [os:find_executable(C) || C <- ["open", "xdg-open"]], E =/= false] of
+        [Exe | _] ->
+            Port = open_port({spawn_executable, Exe}, [{args, [Path]}, exit_status]),
+            receive {Port, {exit_status, _}} -> ok after 5000 -> ok end;
+        [] ->
+            io:format("  open the page in a browser~n")
     end.
 
 trace(Dir, Wasm) ->
@@ -155,7 +207,9 @@ compare(Task, Reply, RecordDir) ->
 task("write") -> write;
 task("revise") -> revise;
 task("digits") -> digits;
-task(_) -> throw({usage, "wasm-bytes: the task is write, revise or digits"}).
+task("pan") -> pan;
+task("reverse") -> reverse;
+task(_) -> throw({usage, "wasm-bytes: the task is write, revise, digits, pan or reverse"}).
 
 %% A reply's path as the repository names it, when it is inside it.
 relative(Path) ->
@@ -175,9 +229,17 @@ exit_code(_) -> 1.
 %% 1: the prompt shows the model the exact bytes that were accepted.
 -spec render_revise_prompt(file:filename(), binary()) -> {ok, iodata()} | {error, wb_check:report()}.
 render_revise_prompt(Root, BaseText) ->
-    case wb_check:check(write, BaseText) of
+    render_prompt(Root, revise, BaseText).
+
+%% The prompt of a task that revises another, for a base reply that passes
+%% the base task.
+-spec render_prompt(file:filename(), wb_task:name(), binary()) ->
+          {ok, iodata()} | {error, wb_check:report()}.
+render_prompt(Root, Task, BaseText) ->
+    {ok, BaseTask} = wb_task:base(Task),
+    case wb_check:check(BaseTask, BaseText) of
         #{verdict := pass, bytes := Bytes} ->
-            Template = prompt_file(Root, revise),
+            Template = prompt_file(Root, Task),
             Hex = string:trim(iolist_to_binary(wb_hex:encode(Bytes)), trailing),
             {ok, binary:replace(Template, ?PLACEHOLDER, Hex)};
         Report ->
@@ -241,12 +303,15 @@ replay(Root, #{task := Task, label := Label, kind := Kind, config := C} = F) ->
     Got = case {Problems, Task} of
               {[_ | _], _} ->
                   undefined;
-              {[], _} when Task =/= revise ->
-                  R = wb_check:check(Task, maps:get(reply, F)),
-                  io:put_chars(wb_report:report(R)),
-                  maps:get(verdict, R);
-              {[], revise} ->
-                  replay_revision(Root, F)
+              {[], _} ->
+                  case wb_task:base(Task) of
+                      none ->
+                          R = wb_check:check(Task, maps:get(reply, F)),
+                          io:put_chars(wb_report:report(R)),
+                          maps:get(verdict, R);
+                      {ok, _} ->
+                          replay_revision(Root, F)
+                  end
           end,
     Ok = Problems =:= [] andalso Got =:= Expect,
     io:format("   => ~ts~n~n", [case Ok of
@@ -257,15 +322,16 @@ replay(Root, #{task := Task, label := Label, kind := Kind, config := C} = F) ->
       source => maps:get(source, C, undefined), trial => wb_fixture:is_trial(F),
       expect => Expect, got => Got, ok => Ok}.
 
-replay_revision(Root, F) ->
+replay_revision(Root, #{task := Task} = F) ->
     case wb_fixture:base_reply(Root, F) of
         {ok, BaseName, BaseText} ->
-            case wb_check:check_revision(BaseText, maps:get(reply, F)) of
+            case wb_check:check_revision(Task, BaseText, maps:get(reply, F)) of
                 {ok, Rev} ->
                     io:put_chars(wb_report:revision(BaseName, Rev)),
                     maps:get(verdict, maps:get(revised, Rev));
                 {error, {base_not_accepted, Report}} ->
-                    io:put_chars(wb_report:base_refused(BaseName, Report)),
+                    {ok, BaseTask} = wb_task:base(Task),
+                    io:put_chars(wb_report:base_refused(BaseName, Report, BaseTask)),
                     base_not_accepted
             end;
         {error, Why} ->

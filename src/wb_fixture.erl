@@ -76,7 +76,8 @@ problems(#{kind := Kind, task := Task, reply := Reply, prompt := Prompt, config 
     Source = maps:get(source, C, undefined),
     [["reply.txt is missing"] || Reply =:= missing]
     ++ [["fixture.config has no expect"] || not is_map_key(expect, C)]
-    ++ [["a revise fixture must name its base"] || Task =:= revise, not is_map_key(base, C)]
+    ++ [["a revise fixture must name its base"]
+        || wb_task:base(Task) =/= none, not is_map_key(base, C)]
     ++ case {Kind, Source} of
            {examples, hand_written} ->
                [["a hand-written fixture needs a note"] || not filled(maps:get(note, C, ""))];

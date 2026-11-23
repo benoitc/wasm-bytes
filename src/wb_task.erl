@@ -5,29 +5,34 @@
 %%   revise  retry(x) changed: 408 becomes 1, 501 becomes 0
 %%   digits  digit_sum(x): the sum of the decimal digits of x, or of -x when
 %%           x is negative; a loop, locals and unsigned division
+%%   pan     screen_pan(x): DX-Ball's position-to-pan helper, as REA
+%%           recovered it from the game's x86 code
+%%   reverse screen_pan(x) changed: the same pan with its sign reversed
 %%
 %% The references are written from the English specifications, in Erlang,
 %% without looking at any candidate. They are the only definition of a right
 %% answer in this repository.
 -module(wb_task).
 
--export([get/1, names/0, inputs/1, expected/2, intended_changes/0, prompt/2]).
+-export([get/1, names/0, inputs/1, expected/2, intended_changes/0, intended_changes/1,
+         prompt/2, base/1, label/1]).
 
 -export_type([name/0, task/0]).
 
 -define(MIN_I32, -2147483648).
 -define(MAX_I32, 2147483647).
 
--type name() :: write | revise | digits.
+-type name() :: write | revise | digits | pan | reverse.
 -type task() :: #{name := name(),
                   export := binary(),
                   params := [atom()],
                   results := [atom()],
                   prompt := file:filename(),
-                  guided => file:filename()}.
+                  guided => file:filename(),
+                  base => name()}.
 
 -spec names() -> [name()].
-names() -> [write, revise, digits].
+names() -> [write, revise, digits, pan, reverse].
 
 -spec get(name()) -> task().
 get(write) ->
@@ -35,7 +40,13 @@ get(write) ->
       prompt => "prompts/write.txt", guided => "prompts/write.guided.txt"};
 get(revise) ->
     #{name => revise, export => ~"retry", params => [i32], results => [i32],
-      prompt => "prompts/revise.txt"};
+      prompt => "prompts/revise.txt", base => write};
+get(pan) ->
+    #{name => pan, export => ~"screen_pan", params => [i32], results => [i32],
+      prompt => "prompts/pan.txt"};
+get(reverse) ->
+    #{name => reverse, export => ~"screen_pan", params => [i32], results => [i32],
+      prompt => "prompts/reverse.txt", base => pan};
 get(digits) ->
     #{name => digits, export => ~"digit_sum", params => [i32], results => [i32],
       prompt => "prompts/digits.txt", guided => "prompts/digits.guided.txt"}.
@@ -54,10 +65,25 @@ prompt(Task, guided) ->
         _ -> {error, no_guided_prompt}
     end.
 
--spec expected(name(), integer()) -> non_neg_integer().
+-spec expected(name(), integer()) -> integer().
 expected(write, X) -> write_reference(X);
 expected(revise, X) -> revise_reference(X);
-expected(digits, X) -> digits_reference(X).
+expected(digits, X) -> digits_reference(X);
+expected(pan, X) -> pan_reference(X);
+expected(reverse, X) -> reverse_reference(X).
+
+%% The task a two-prompt task revises, whose accepted bytes its prompt holds.
+-spec base(name()) -> {ok, name()} | none.
+base(Task) ->
+    case wb_task:get(Task) of
+        #{base := Base} -> {ok, Base};
+        _ -> none
+    end.
+
+%% How reports name a task when it is the base of a revision.
+-spec label(name()) -> string().
+label(write) -> "task 1";
+label(Task) -> "the " ++ atom_to_list(Task) ++ " task".
 
 %% Task 1: 1 for 429, 1 for 500 through 599 inclusive, 0 for every other i32.
 write_reference(429) -> 1;
@@ -78,10 +104,29 @@ revise_reference(_) -> 0.
 digits_reference(X) ->
     lists:sum([D - $0 || D <- integer_to_list(abs(X))]).
 
+%% DX-Ball 1.07, the function at 0x406400, as REA recorded its instructions:
+%% FILD x; FMUL by the double 1.5625; FSUB the double 500.0; FMUL by the
+%% stored scale, whose initial value is 1.0 and which nothing in the
+%% reconstruction changes; then __ftol, which truncates toward zero. Every
+%% step is exact in double precision for the positions checked.
+pan_reference(X) ->
+    trunc((X * 1.5625 - 500.0) * 1.0).
+
+%% Reversed stereo: the same pan with its sign reversed, so a position left
+%% of centre sounds on the right and the centre stays at 0. For a whole
+%% position x this is also the pan of the mirrored position 640 - x.
+reverse_reference(X) ->
+    -pan_reference(X).
+
 -spec inputs(name()) -> [integer()].
 inputs(write) -> retry_inputs();
 inputs(revise) -> retry_inputs();
-inputs(digits) -> digit_inputs().
+inputs(digits) -> digit_inputs();
+%% Every position the original harness checks, 0 through 640. The harness
+%% ran them at five scales; the game's scale is a constant 1.0, so these are
+%% its 641 cases at that scale.
+inputs(pan) -> lists:seq(0, 640);
+inputs(reverse) -> lists:seq(0, 640).
 
 %% Every status from 100 through 599, then the values outside that range that
 %% catch the usual ways a hand-written range check goes wrong.
@@ -134,7 +179,13 @@ spread(N, X, Acc) ->
 
 %% The inputs whose result the change request in task 2 changes, as
 %% `{Input, Before, After}', computed from the two references.
--spec intended_changes() -> [{integer(), 0 | 1, 0 | 1}].
+-spec intended_changes() -> [{integer(), integer(), integer()}].
 intended_changes() ->
-    [{X, write_reference(X), revise_reference(X)}
-     || X <- inputs(revise), write_reference(X) =/= revise_reference(X)].
+    intended_changes(revise).
+
+%% The same, for any task that revises another.
+-spec intended_changes(name()) -> [{integer(), integer(), integer()}].
+intended_changes(Task) ->
+    {ok, Base} = base(Task),
+    [{X, expected(Base, X), expected(Task, X)}
+     || X <- inputs(Task), expected(Base, X) =/= expected(Task, X)].

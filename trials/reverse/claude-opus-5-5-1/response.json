@@ -1,0 +1,17 @@
+{
+  "claude_code_version": "2.1.331",
+  "is_error": false,
+  "mcp_servers": [],
+  "model": "claude-opus-5-5",
+  "num_turns": 1,
+  "result": "00 61 73 6d 01 00 00 00 01 06 01 60 01 7f 01 7f\n03 02 01 00 07 0e 01 0a 73 63 72 65 65 6e 5f 70\n61 6e 00 00 0a 26 01 24 00 20 00 b7 44 00 00 00\n00 00 00 f9 3f a2 44 00 00 00 00 00 40 7f 40 a1\n44 00 00 00 00 00 00 f0 bf a2 aa 0b",
+  "tools": [],
+  "usage": {
+    "cache_creation_input_tokens": 1266,
+    "cache_read_input_tokens": 0,
+    "input_tokens": 2,
+    "output_tokens": 1037,
+    "output_tokens_details": { "thinking_tokens": 866 }
+  }
+}
+

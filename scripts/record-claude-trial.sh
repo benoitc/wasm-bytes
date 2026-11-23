@@ -22,16 +22,16 @@ SYSTEM="You are a helpful assistant."
 if [ -e "$DIR" ]; then echo "$DIR exists" >&2; exit 2; fi
 mkdir -p "$DIR"
 case $TASK in
-    write|digits)
+    write|digits|pan)
         case ${PROMPT:-baseline} in
             baseline) "$ROOT/bin/wasm-bytes" prompt "$TASK" > "$DIR/prompt.txt" ;;
             guided) "$ROOT/bin/wasm-bytes" prompt "$TASK" --guided > "$DIR/prompt.txt" ;;
             *) echo "PROMPT is baseline or guided" >&2; exit 2 ;;
         esac ;;
-    revise)
-        [ -n "$BASE" ] || { echo "revise needs a base, such as write/LABEL" >&2; exit 2; }
-        "$ROOT/bin/wasm-bytes" prompt revise --base "$ROOT/trials/$BASE/reply.txt" > "$DIR/prompt.txt" ;;
-    *) echo "task is write, digits or revise" >&2; exit 2 ;;
+    revise|reverse)
+        [ -n "$BASE" ] || { echo "$TASK needs a base, such as write/LABEL or pan/LABEL" >&2; exit 2; }
+        "$ROOT/bin/wasm-bytes" prompt "$TASK" --base "$ROOT/trials/$BASE/reply.txt" > "$DIR/prompt.txt" ;;
+    *) echo "task is write, digits, pan, revise or reverse" >&2; exit 2 ;;
 esac
 
 EMPTY=$(mktemp -d)
@@ -73,11 +73,12 @@ if "$ROOT/bin/wasm-bytes" trace "$DIR" --wasm "$EMPTY/module.wasm" >/dev/null 2>
     (cd "$EMPTY" && shasum -a 256 module.wasm) > "$DIR/module.sha256"
 fi
 
-if [ "$TASK" != revise ]; then
-    OUT=$("$ROOT/bin/wasm-bytes" check "$TASK" "$DIR/reply.txt" || true)
-else
-    OUT=$("$ROOT/bin/wasm-bytes" check revise "$DIR/reply.txt" --base "$ROOT/trials/$BASE/reply.txt" || true)
-fi
+case $TASK in
+    revise|reverse)
+        OUT=$("$ROOT/bin/wasm-bytes" check "$TASK" "$DIR/reply.txt" --base "$ROOT/trials/$BASE/reply.txt" || true) ;;
+    *)
+        OUT=$("$ROOT/bin/wasm-bytes" check "$TASK" "$DIR/reply.txt" || true) ;;
+esac
 VERDICT=$(printf '%s\n' "$OUT" | awk '$1 == "verdict" {print $2}' | tail -1)
 
 {
@@ -86,7 +87,7 @@ VERDICT=$(printf '%s\n' "$OUT" | awk '$1 == "verdict" {print $2}' | tail -1)
     echo "{interface, \"Claude Code $VERSION headless (claude -p --model $MODEL), built-in tools and MCP servers off, no settings loaded, system prompt replaced with \\\"$SYSTEM\\\", run from an empty directory; Claude Code still adds context of its own (environment and account details). Default sampling, one sample.\"}."
     echo "{recorded_on, \"$(date +%F)\"}."
     echo "{expect, $VERDICT}.          % the verdict the runner gave when this was recorded"
-    if [ "$TASK" = revise ]; then echo "{base, \"$BASE\"}."; fi
+    case $TASK in revise|reverse) echo "{base, \"$BASE\"}." ;; esac
     if [ "${PROMPT:-baseline}" = guided ]; then echo "{prompt_variant, guided}."; fi
 } > "$DIR/fixture.config"
 rm -rf "$EMPTY"
