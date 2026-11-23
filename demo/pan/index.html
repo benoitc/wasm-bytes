@@ -50,10 +50,12 @@
 <body>
 <main>
   <p class="muted"><a href="https://github.com/benoitc/wasm-bytes/blob/main/doc/dx-ball.md">How this was made and checked</a></p>
-  <h1>Hear the sound follow the ball</h1>
-  <p>Turn <strong>Sound</strong> on and watch the ball cross the screen.
-  Listen once in <strong>Original</strong>, then select <strong>Reversed</strong>.
-  The ball still moves right. Which way does the beep go?</p>
+  <h1>What decides which speaker plays the beep?</h1>
+  <p>REA worked out how the game DX-Ball turns a brick’s position into a number for its sound system.
+  We gave that rule to Claude and asked it to write a program we could use in this browser.
+  The browser moves the ball and plays the beep. Claude’s program decides how far left or right it goes.</p>
+  <p>Turn <strong>Sound</strong> on. Listen in <strong>Original</strong>, then switch to
+  <strong>Reversed</strong>. With the sound muted, watch the marker below the ball.</p>
 
   <div class="controls">
     <button id="sound" aria-pressed="false">Sound: off</button>
@@ -72,21 +74,31 @@
   <div class="meter" aria-hidden="true"><div class="mark" id="mark"></div></div>
   <div class="meter-labels"><span>left</span><span>stereo position sent to the speakers</span><span>right</span></div>
 
-  <h2>What changed?</h2>
-  <p>In <strong>Original</strong>, the beep follows the ball. In <strong>Reversed</strong>,
-  it travels the other way. If your sound is off, follow the marker below the ball.
-  Both versions put the beep in the middle when the ball reaches the center.</p>
-  <p>REA worked out how the game DX-Ball turned a position into a number for its sound system.
-  We described that rule to a language model and asked it to write a program the browser could run.
-  Then we gave it its program back and asked it to reverse the sound.</p>
-  <p>The browser draws the ball and plays the beep. Each program decides where the beep should come from. At the right edge, the original returns 500 and the
-  revision returns −500. The browser sends those values to opposite speakers.</p>
+  <h2>What did we ask Claude?</h2>
+  <p>The prompt starts with this instruction.</p>
+  <blockquote>Write a complete WebAssembly module in the binary format (the bytes of a
+  .wasm file, version 1) and reply with its bytes as hex.</blockquote>
+  <p>The rest gives the rule REA recovered and asks for a function called <code>screen_pan</code>.
+  Claude’s reply contains the whole program. Decode the pairs of digits into bytes and the browser can
+  load it. <a href="https://github.com/benoitc/wasm-bytes/blob/main/trials/pan/claude-sonnet-5-5-1/prompt.txt">Read the exact prompt used for the default demo</a>.</p>
+
+  <h2>What changes when I switch versions?</h2>
+  <p>At the right edge, the browser calls <code>screen_pan(640)</code>. The original returns
+  <strong>500</strong>, so the browser plays the beep on the right. We then asked Claude to reverse
+  the sign. With the revised file loaded, the same call returns <strong>−500</strong>, so the beep
+  plays on the left. In the middle, both return zero.</p>
+
+  <h2>How would I use this in my app?</h2>
+  <p>You can load the file once and call the function whenever you need that calculation. The call runs
+  on your device. To change the rule, you can load a revised file and keep the same drawing and audio
+  code. The demo builder checks both files at all 641 screen positions before opening this page.</p>
+
   <details>
-    <summary>Which recorded programs am I hearing?</summary>
+    <summary>Inspect the two files this page loaded</summary>
     <p>Each row identifies the model and its saved reply. The fingerprint (SHA-256)
     lets you check that the browser loaded the recorded bytes.</p>
     <table>
-      <thead><tr><th>Version</th><th>Model and reply</th><th>File fingerprint</th></tr></thead>
+      <thead><tr><th>Version</th><th>Model and saved reply</th><th>File fingerprint (SHA-256)</th></tr></thead>
       <tbody id="modules"></tbody>
     </table>
   </details>

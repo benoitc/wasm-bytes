@@ -68,13 +68,17 @@ This task tests whether the model can encode a loop that extracts one digit at a
 bin/wasm-bytes check digits trials/digits/claude-haiku-5-5-1/reply.txt
 ```
 
-## Hear a function recovered from a game
+## How we reused a DX-Ball sound rule
 
-In DX-Ball, a brick hit has a position on screen and a sound. We asked Claude to write the small program that turns that position into a stereo setting. Then we asked it to make the sound travel the other way. Sonnet changed one byte.
+**What REA did.** REA inspected the old DX-Ball game and recovered the calculation behind a brick-hit sound. Give the calculation the brick’s horizontal position and it returns a number for the sound system. In our browser demo, −500 means the left speaker, 0 means the middle, and 500 means the right speaker. [REA case study](https://github.com/morluto/rea#dx-ball-reconstruct-a-sound-pan-calculation)
+
+**What we asked Claude to do.** We put REA’s calculation in a prompt and asked Claude to write a function called `screen_pan` that our app could load. Here is the opening instruction from the prompt. “Write a complete WebAssembly module in the binary format (the bytes of a .wasm file, version 1) and reply with its bytes as hex.” [Full prompt](trials/pan/claude-sonnet-5-5-1/prompt.txt)
+
+**What a developer gets.** Sonnet returned a 76-byte program. The app calls `screen_pan(640)`, gets back `500`, and plays the sound on the right. We gave Sonnet those bytes and asked it to reverse the stereo. With the revised file, the exact same call returns `−500`, so the sound plays on the left. A developer can swap that one rule without rewriting the app or calling an AI service during playback. Both versions passed every one of the 641 positions tested. [Original reply](trials/pan/claude-sonnet-5-5-1/reply.txt) · [Change request](trials/reverse/claude-sonnet-5-5-1/prompt.txt) · [Revised reply](trials/reverse/claude-sonnet-5-5-1/reply.txt)
 
 ![The ball moves right in both versions. The sound follows it in Original mode and travels left in Reversed mode.](doc/media/dx-ball-pan-replay.gif)
 
-To hear it, run the command below, turn **Sound** on, and switch from **Original** to **Reversed**. The ball follows the same path on both passes. [Walk through the demo](doc/dx-ball.md#hear-it) · [Read the exact prompt](trials/pan/claude-sonnet-5-5-1/prompt.txt)
+To hear it, run the command below, turn **Sound** on, and switch from **Original** to **Reversed**. The ball follows the same path on both passes. [What REA found, the full prompt, and what came back](doc/dx-ball.md)
 
 ```sh
 bin/wasm-bytes pan-demo
