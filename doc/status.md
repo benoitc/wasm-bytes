@@ -43,6 +43,18 @@ With the baseline prompts, the local model laid out every section and length cor
 
 Opus and Sonnet sent the same bytes with both prompts. Haiku's guided `retry` passed where its baseline attempt had not. With one attempt per cell, these results cannot separate the effect of the prompt from the variation between attempts. Each local trial keeps the model's thinking trace in `thinking.txt`.
 
+## A function recovered from DX-Ball
+
+On 23 November 2026, the three Claude models each received one prompt describing `screen_pan`. REA recovered this position-to-pan helper from DX-Ball's x86 code. Each model then received its own accepted bytes and a request to reverse the stereo. Each cell is one attempt, checked on every position from 0 through 640. [What REA recovered and which cases can be checked](dx-ball.md)
+
+| Model | `pan` | `reverse` |
+| --- | --- | --- |
+| Claude Sonnet 5.5 | 641 of 641 | 641 of 641, only the 640 requested changes |
+| Claude Opus 5.5 | 641 of 641 | 641 of 641, only the 640 requested changes |
+| Claude Haiku 5.5 | 641 of 641 | 641 of 641, only the 640 requested changes |
+
+All three `pan` replies are the same 76 bytes, which match the constructed example. Sonnet and Opus reversed the stereo by changing one byte, and Haiku by changing two. All six modules gave the same results in Wasmtime. The game's executable was not available, so these results were checked against REA's recorded instructions, not against the original game's execution. [Trials](../trials/pan/) · [Revisions](../trials/reverse/)
+
 ## Cross-engine and platform runs
 
 On 23 November 2026, the Sonnet write module ran in erlang_wasm 0.11.0 and in Wasmtime 50.0.1 on all 528 inputs. Both engines gave the reference answer every time and reported the same SHA-256 for the bytes they received. This held on three host configurations, all on one Apple silicon Mac:

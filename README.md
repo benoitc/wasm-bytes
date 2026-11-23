@@ -68,6 +68,30 @@ This task tests whether the model can encode a loop that extracts one digit at a
 bin/wasm-bytes check digits trials/digits/claude-haiku-5-5-1/reply.txt
 ```
 
+## Hear a function recovered from a game
+
+REA recovered a small function from the x86 code of DX-Ball, a 1996 game. It turns a horizontal screen position into a stereo pan value for the game's sounds. `screen_pan(0)` returns −500 at the left edge, `screen_pan(320)` returns 0, and `screen_pan(640)` returns 500. We described that recovered behavior to three models and asked each one for the Wasm bytes. Then we gave each model its own accepted bytes and asked it to reverse the stereo. All six replies passed on every position from 0 through 640, in erlang_wasm and in Wasmtime. [Prompt](prompts/pan.txt) · [What REA recovered and what was checked](doc/dx-ball.md)
+
+To replay the checks of Sonnet's pair, run the command below. It checks the original module again, then the reversed one against it:
+
+```sh
+bin/wasm-bytes check reverse trials/reverse/claude-sonnet-5-5-1/reply.txt --base trials/pan/claude-sonnet-5-5-1/reply.txt
+```
+
+```text
+  base     trials/pan/claude-sonnet-5-5-1/reply.txt: 76 bytes, passes the pan task
+  request  done: all 640 requested changes; no other result changed
+  verdict  pass
+```
+
+To listen, build and open the demo page:
+
+```sh
+bin/wasm-bytes pan-demo
+```
+
+A ball crosses the screen and beeps. Turn the sound on, then switch from Original to Reversed. The same motion now sounds from right to left. REA supplied the behavior and the model wrote every byte of both modules. The page is the host: it moves the ball, calls `screen_pan(x)` on the selected module, and maps the returned value to the speakers. Only the module changes between modes. The page shows x and the returned value beside the ball, so you can follow along with the sound muted. The game's executable was not available, so the replies were checked against REA's recorded instructions rather than against the game itself. [Demo and evidence](doc/dx-ball.md#hear-it)
+
 ## Try your own model
 
 1. **Send the write prompt.** Run the command below and paste its entire output into your model. This includes the retry rule, the required function signature, and the instructions for formatting the reply. For a small or local model, add `--guided`. That version includes the byte of each instruction and a step-by-step method. [Guided prompts](trials/README.md#use-the-guided-prompt)
@@ -120,6 +144,7 @@ The program ran, but it declined to retry status 599. That single input is enoug
 - See what each claim rests on, with the commands and run records. [Evidence](doc/evidence.md)
 - Run `bin/wasm-bytes demo` to replay everything locally. The summary compares each observed verdict with its saved label. A deliberately wrong example counts as a successful replay when it fails as expected.
 - Read the recorded trials and their limits. Opus and Sonnet passed every task on their recorded attempts. A local model run through Ollama failed both tasks with the baseline prompts, then passed `digit_sum` with the guided prompt. [Project status](doc/status.md)
+- See what REA recovered from DX-Ball, what was checked, and what remains unknown. [DX-Ball sound pan](doc/dx-ball.md)
 - Save a run from your own model so someone else can replay it. [Record a trial](trials/README.md)
 
 ## Watch a prompt become a running Wasm function
