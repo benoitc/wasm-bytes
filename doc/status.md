@@ -59,4 +59,4 @@ The three `digit_sum` modules gave the same result: 1,353 of 1,353 in both engin
 
 Run `bin/wasm-bytes replay` from the repository root for the short account, or `bin/wasm-bytes demo` to replay every example and trial. To try another model, send it the same write prompt and keep its reply intact. [First-run instructions](../README.md) · [How to record a trial](../trials/README.md)
 
-The current tasks both ask for the complete module in hexadecimal. Planned comparisons include larger tasks, repeated attempts across providers, and asking for just the function body or for WebAssembly’s text format (WAT). The repository currently has no license file.
+The current tasks both ask for the complete module in hexadecimal. Planned comparisons include larger tasks, repeated attempts across providers, and asking for just the function body or for WebAssembly’s text format (WAT).
