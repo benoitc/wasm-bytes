@@ -1,0 +1,1285 @@
+We need answer with only HTML document. Need construct page. Need think carefully about requirements.
+
+We need create complete web page single HTML file. It loads modules.js (same folder) defining window.PAN_MODULES with original and reversed entries: label, model, reply, sha256, bytes (base64). Each module exports one function screen_pan(x), takes integer x 0..640, returns integer -500..500. Page loads script, instantiate both modules, call screen_pan on selected one.
+
+Page: ball moves across horizontal track left to right repeatedly. Position integer x 0..640. While sound on, plays short beep every 200 ms. Pan of each beep from value v screen_pan(x) returns for ball's position at that moment. Use Web Audio API and StereoPannerNode whose pan is v/500. Every beep same pitch volume length. Switching modes changes nothing but which module's screen_pan page calls.
+
+Beside ball, shows current x and value screen_pan(x). When ball paused and person switches modes, shown value is selected module's value for that x. Page never computes pan itself; every value shown or played comes from calling screen_pan.
+
+Controls exact ids: sound button toggles on/off. mode-original selects Original. mode-reversed selects Reversed. pause pauses/resumes ball. reading element shows x and screen_pan(x).
+
+Requirements: current desktop browsers and Safari on iPhone including silent switch on. Hmm "including when the iPhone's silent switch is on". On iPhone, silent switch mutes audio? Actually silent switch mutes ringer/alerts but media? In Safari, audio plays even with silent switch? Historically iOS silent switch mutes all audio including web audio? Let's recall: On iOS, the silent switch mutes the ringer and alerts, but does it mute media playback? I think on iOS, the silent switch does mute all sounds including media? Actually in iOS, turning on silent switch mutes sounds but does NOT mute media playback? Let's recall: On iPhone, the silent switch mutes the ring and alerts; music/video still plays normally. I believe media playback is not affected by silent switch. But requirement says "including when the iPhone's silent switch is on". Maybe they want use `playsinline`? Or perhaps they want Web Audio API with `AudioContext` resumed on user gesture; silent switch irrelevant. Maybe requirement hints that to make sound audible on iPhone with silent switch on, we should not rely on system media volume? Hmm.
+
+Could be a trick: On iOS Safari, Web Audio API plays regardless of silent switch? Actually I recall iOS silent switch mutes all audio including web audio? Let's investigate from memory: iOS has silent switch that mutes ringtone and vibrate? In iOS, the silent switch controls ringer and alerts; media is unaffected (you hear music with silent switch on). But maybe on iPhone with silent switch on, Web Audio still plays. The requirement "including when the iPhone's silent switch is on" might just mean ensure audio context works. Another possibility: Use `<audio>`? No, need Web Audio API StereoPannerNode.
+
+Actually there is a known issue: iOS Safari blocks Web Audio until user gesture; also silent switch mutes? Hmm. There is a known Safari/iOS limitation: AudioContext may be suspended; resume on gesture. Silent switch? I think iOS respects silent switch for audio sessions; Web Audio might be silenced when silent switch is on. There is a trick: use `playsinline` and `audio` element with `autoplay`? But requirement explicitly says Web Audio API and StereoPannerNode. So we must use that.
+
+Maybe "including when the iPhone's silent switch is on" refers to using Web Audio because it is not muted by silent switch? Hmm not sure. Let's not overthink; use Web Audio, resume context on user tap, and maybe attempt to handle Safari by using `webkitAudioContext` fallback. Also ensure audio context created/resumed inside click handler for sound button.
+
+Need implement. Let's design.
+
+HTML structure:
+- header maybe title "DX-Ball sound effect".
+- main: track with ball (absolutely positioned div), reading element beside ball (could be in a flex row: track area and readout). "Beside the ball" - reading element adjacent. Maybe layout: top row: ball track (position relative, width 100%), below it reading? "Beside the ball" maybe reading should be beside the ball horizontally. We can put reading in a side panel. Let's design: a container with ball track (height ~80px) and reading panel to right? On phone, readable without horizontal scroll; use column layout with reading under or above track. "Beside the ball" suggests the reading shows near the ball; could place reading in a flex row: [track] [reading]. On narrow screens, stack? Requirement says readable on a phone without scrolling sideways, so stacking is fine. But "Beside the ball" maybe reading element should be adjacent to ball; not necessarily same row.
+
+Let's create a section with `display:flex; gap; align-items:center; flex-wrap: wrap;` with `.track-wrap` flex:1 and `.readout` min-width. On narrow, wrap. Or simply put reading above track. Hmm.
+
+Requirements only specify reading element id and content. We can show "x: 123 | pan: 456". It says "shows the current x and the value screen_pan(x) returned". Could include label and value. Reading element should contain current x and value. Maybe `x: 0, screen_pan: -500`. Keep simple: `x = 320 · screen_pan = 123`. Use textContent.
+
+Controls: buttons sound, mode-original, mode-reversed, pause. Add active state styling for selected mode.
+
+JS:
+- load modules.js via script tag in HTML. After load, read window.PAN_MODULES. Need handle missing/invalid gracefully? Probably just proceed.
+- Function instantiateModule(entry): bytes base64 -> Uint8Array; WebAssembly.instantiate(bytes, {}) -> exports.screen_pan. Validate function exists. Store {label, screen_pan}.
+- State: mode 'original' or 'reversed'; soundOn bool; paused bool; x integer 0..640; direction? Ball moves left to right again and again. It should move across track from left to right, then reset to left and repeat. Position integer x from 0 through 640. Movement: animation via requestAnimationFrame; x increments by speed per frame; wrap at 640 -> 0. Speed maybe 240 px/s? Track represents 0..640, ball moves across. Use requestAnimationFrame. While sound on, every 200ms play beep. Implement beep scheduling with setInterval? Better use elapsed time in rAF loop: lastBeep timestamp; if soundOn and now - lastBeep >= 200, play beep at current x. But requirement: "While the sound is on, the page plays a short beep every 200 ms." Could use setInterval(200) while on; but must ensure beeps align. Simpler: in rAF loop, check time.
+
+Beep: create oscillator + gain + stereo panner. Pitch same, volume same, length same. E.g., frequency 880 Hz (or 660?). Short beep length 0.08 s. Use StereoPannerNode pan = v/500. Connect oscillator -> gain -> panner -> destination. Envelope: gain 0 -> 0.5 -> 0 over duration. Oscillator type 'square'? DX-Ball sound effect? The original sound effect maybe a beep. Same pitch; choose e.g. 987 Hz? Let's pick 880 Hz sine? "same pitch, same volume, same length" — any fixed values fine. Use square wave for beep-ish. Volume same; e.g., 0.2. Length 0.1 s.
+
+StereoPannerNode: `audioCtx.createStereoPanner()`; set pan.value = v/500. Note some browsers require panner before gain? Connect: osc -> gain -> panner -> destination. Good.
+
+iPhone silent switch: Use AudioContext; maybe also set `audioCtx.resume()` on sound button click. Also on first user interaction. If Safari, `webkitAudioContext`. Also note Safari's StereoPannerNode supported? Safari 14.1+? Actually StereoPannerNode supported in Safari 14.1? I think Web Audio StereoPanner supported since Safari 14.1? Hmm. Could fallback: if createStereoPanner not available, create ChannelSplitter/Merger? But requirement explicitly wants StereoPannerNode; current desktop browsers and Safari iPhone — modern Safari supports StereoPannerNode. Fine.
+
+Silent switch: On iOS, silent switch mutes audio? Let's verify from memory: iPhone silent switch "mutes" the ringer and alerts. Music still plays. However, there is a known iOS behavior: Web Audio API is silenced when the silent switch is on? Search memory: Many StackOverflow posts: "AudioContext muted by silent switch on iOS". I recall iOS does mute Web Audio when silent switch is on? Actually I recall that on iOS, the silent switch does not affect media playback (music, videos), but it does affect notifications and ringer. Hmm.
+
+But the requirement says "It works in current desktop browsers and in Safari on an iPhone, including when the iPhone's silent switch is on." This could be a hint that the page should not rely on the device volume or the silent switch; maybe use Web Audio because it's not muted by silent switch? Or maybe we need to use `AudioContext` with `resume()` and it will play regardless. Let's consider: In iOS Safari, Web Audio output is controlled by the same audio session as media; the silent switch mutes it? Actually iOS silent switch sets audio session to "ambient" vs "playback"? Hmm.
+
+I recall that on iPhone, the silent switch mutes all audio except... no. Let's recall concretely: iPhone silent switch: "When the silent switch is on, the iPhone rings and alerts are muted, but media playback (music, videos) still plays." Yes, I'm fairly confident media is unaffected. Web Audio is media playback. So requirement just means ensure it works in Safari iOS (gesture resume etc.) even if silent switch on; meaning don't rely on the device volume. Fine.
+
+Potential issue: iOS requires audio context resumed in a user gesture; our sound button click handler will create/resume context. Also mode/pause buttons are clicks. Good.
+
+Need ensure beep every 200ms while sound on even if ball paused? "While the sound is on, the page plays a short beep every 200 ms." The ball moves; while paused, sound still on? Hmm. If ball paused and sound on, beeps continue every 200 ms? The requirement doesn't say beeps stop when paused. "While the sound is on" suggests yes, beeps continue. But "The pan of each beep comes from the value screen_pan(x) returns for the ball's position at that moment." If paused, x fixed; beeps every 200ms with same pan. That's plausible. Also "When the ball is paused and the person switches modes, the shown value is the selected module's value for that x." So pause only pauses ball movement, not sound. Good. Keep beep timer running independent of pause.
+
+Implementation: rAF loop always running; each frame: if not paused, advance x. Every 200ms (based on performance.now), if soundOn, compute v = selectedScreenPan(x); play beep(v); update reading (also every frame or on change). Reading update: should show current x and screen_pan(x). Could update every frame; cheap. But requirement says "the page shows the current x and the value screen_pan(x) returned" — update continuously. Also when switching mode, update reading immediately. Also when paused and switching modes, update reading to selected module value. So update reading whenever x changes, mode changes, or pause changes. Simplest: update reading every frame (and on mode switch). Calling screen_pan every frame is fine (cheap integer function). But "Every value it shows or plays comes from calling screen_pan" — calling every frame fine.
+
+Ball movement: x integer 0..640. Use speed e.g. 320 units per second? Track width maybe 100%; ball position = x/640 * trackWidth. Need convert x to pixels for CSS left. Use percentage: left = (x/640*100)% with transform translateX(-50%). Width of ball ~18px. Ball moves left to right; reset to 0 when reaching 640. "again and again". Could also loop at 640 -> 0.
+
+Speed: choose e.g. 200 units/s? 640 units in 3.2 s. Let's pick 220 units per second? Hmm. Let's use 256 units/sec => 2.5 s per sweep. Fine.
+
+Beep scheduling: Use `lastBeep` timestamp; in loop, if soundOn && now - lastBeep >= 200: lastBeep = now; beep. If sound toggled on, set lastBeep = now (so immediate beep) — maybe play immediately. Good.
+
+Sound button toggles soundOn; when turning on, resume AudioContext and play immediately; when off, stop? Beeps are short (~0.1s); turning off just stops future beeps. Fine.
+
+Pause button: toggles paused; text changes "Pause"/"Resume". When paused, ball stops (x stays). Reading still updates (screen_pan for x). Good.
+
+Mode buttons: select module; update active class; update reading.
+
+Also display selected mode label maybe. Not required but fine.
+
+Now, modules.js loading: We cannot see its contents; it defines window.PAN_MODULES. Use script tag in HTML: `<script src="modules.js"></script>`. Then main script after it. If modules.js fails to load or window.PAN_MODULES missing, show error in reading or a status. But page must still function? For testing, presumably modules.js exists. Handle gracefully: display message "modules.js not loaded" in reading. But "The page never computes the pan itself" — error message is fine.
+
+Instantiation: bytes is base64 string. Convert: `Uint8Array.from(atob(entry.bytes), c => c.charCodeAt(0))`. `WebAssembly.instantiate(bytes, {})` returns promise. Need async. We can load modules asynchronously at startup; until ready, screen_pan unavailable; reading shows "loading…". But requirement: page uses selected module's screen_pan; if not loaded yet, show "loading". That's okay. Could also instantiate synchronously? WebAssembly.instantiate is async. Use async init.
+
+Alternatively use `WebAssembly.Module` synchronously? There's `new WebAssembly.Module(bytes)` sync; then `new WebAssembly.Instance(module)` sync. That's better: instantiate synchronously so page ready immediately. `new WebAssembly.Module(bytes)` throws on invalid; catch and mark error. `new WebAssembly.Instance(module, {})`. Exports.screen_pan. Use that. Good.
+
+Note: `bytes` might be base64 of a complete module; fine.
+
+Reading element: show x and value. Format: `x: 320 · screen_pan: 123`. Include label of mode? Maybe separate small line. Reading element must show x and screen_pan(x); adding mode label okay. Keep reading concise. Maybe `x=320 · Original screen_pan=123`. But "the page never computes the pan itself" — including module label is fine.
+
+Also show mode buttons active state; maybe a status line showing selected module label. Not required.
+
+Design: dark theme? Readable on phone. Use system fonts. Track with gradient. Ball as glowing circle. Reading in monospace. Buttons large enough for touch.
+
+Layout: 
+```
+<main>
+  <h1>DX-Ball sound</h1>
+  <p class="sub">...</p>
+  <section class="stage">
+    <div class="track" id="track"><div class="ball" id="ball"></div></div>
+    <div id="reading" class="reading">x: 0 · screen_pan: 0</div>
+  </section>
+  <section class="controls">
+    <button id="sound">Sound: Off</button>
+    <button id="mode-original">Original</button>
+    <button id="mode-reversed">Reversed</button>
+    <button id="pause">Pause</button>
+  </section>
+</main>
+```
+"Beside the ball" - reading beside track; with flex row, reading to the right. On phone wrap to column. Good.
+
+Ball position: track position relative; ball absolute with left = percentage. Use `style.left = (x/640*100) + '%'` and transform translateX(-50%). Ball size 22px. Track height 56px, rounded, background dark. Add tick marks? optional.
+
+Now beep function:
+```
+function playBeep(panValue){
+  if(!audioCtx) return;
+  const ctx = audioCtx;
+  const t = ctx.currentTime;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  const panner = ctx.createStereoPanner();
+  osc.type = 'square';
+  osc.frequency.setValueAtTime(880, t);
+  panner.pan.setValueAtTime(panValue/500, t);
+  gain.gain.setValueAtTime(0, t);
+  gain.gain.linearRampToValueAtTime(0.22, t+0.005);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t+0.09);
+  osc.connect(gain); gain.connect(panner); panner.connect(ctx.destination);
+  osc.start(t); osc.stop(t+0.1);
+  // cleanup
+  osc.onended = () => { osc.disconnect(); gain.disconnect(); panner.disconnect(); };
+}
+```
+Same pitch/volume/length every beep. Good.
+
+AudioContext creation: create lazily on first sound toggle or on any click? Create on first user gesture. If sound toggled on, create/resume. Also maybe create on page load? Autoplay policy prevents start until gesture; creating is allowed but context suspended. Better create on sound button click.
+
+```
+let audioCtx = null;
+function ensureAudio(){
+  if(!audioCtx){
+    const AC = window.AudioContext || window.webkitAudioContext;
+    audioCtx = new AC();
+  }
+  if(audioCtx.state === 'suspended'){ audioCtx.resume(); }
+}
+```
+
+On sound button: soundOn = !soundOn; if soundOn { ensureAudio(); lastBeep = 0? Actually play immediately: lastBeep = performance.now(); maybe call playBeep right away with current v. } Update button text.
+
+Pause button: paused = !paused; textContent = paused ? 'Resume' : 'Pause'; aria-pressed.
+
+Mode buttons: set mode; update active classes; update reading immediately.
+
+Loop with rAF:
+```
+let last = performance.now();
+function frame(now){
+  const dt = Math.min(0.05, (now - last)/1000); last = now;
+  if(!paused){ x += SPEED*dt; if(x > 640){ x = x - 640? or x = 0? } }
+```
+Hmm wrap: ball moves left to right then again. When x reaches 640, reset to 0? "moves across ... from left to right, again and again. Its position is an integer x from 0 through 640." So reset to 0 after reaching 640. Use `if(x >= 640) x = 0;`? That teleports. Fine.
+
+Integer x: x stored as float for smooth movement but displayed/used as integer? Requirement: "Its position is an integer x from 0 through 640." So we should keep x as integer. We can store float and truncate for use: `const xi = Math.round(x)` or `Math.floor(x)`. But then "position is an integer" — better store integer: advance by speed*dt and set x = Math.floor(...). Display integer. Use xi = Math.round? Let's store `pos` float; `x = Math.round(pos)` clamp 0..640. Hmm, simpler: store `x` as float internally, compute `xi = Math.max(0, Math.min(640, Math.round(x)))` for screen_pan and display and ball position? Ball position should reflect xi? If we use xi for ball left, movement appears steppy (increments ~4 px per frame) but at 60fps, 220/60≈3.7 units => sub-pixel. Fine. Actually display ball at xi/640 fraction; slight stutter imperceptible. Alternatively store integer and add speed*dt rounded. Let's do: `xFloat += SPEED*dt; if(xFloat >= 640) xFloat = 0; x = Math.round(xFloat);` Hmm rounding could cause x=640 for a while. Fine.
+
+Actually simpler: `x += Math.round(SPEED*dt)` with integer x; at 60fps, speed 240 => 4 px/frame. Good.
+
+Beep scheduling: `if(soundOn && now - lastBeep >= 200){ lastBeep = now; const v = selected.screen_pan(x); playBeep(v); }`. Also reading update each frame: `reading.textContent = ...`. Reading text: `x: ${x} · screen_pan: ${v}`. Maybe include mode label: `${label} — x: ${x}, screen_pan: ${v}`. Fine.
+
+Update reading also on mode switch even if paused (frame loop updates every frame anyway). So no need separate.
+
+But calling screen_pan every frame: fine.
+
+Sound on/off: also stop ongoing? Beeps short; fine.
+
+Edge: If modules not loaded, selected.screen_pan undefined; reading shows "loading…" or "modules unavailable". We'll guard.
+
+Now "It makes no network requests and uses no libraries" — script src="modules.js" is a local file, that's allowed ("A script named modules.js, in the same folder as the page"). It says no network requests; local file same origin is fine presumably. Yes, they explicitly say load with `<script src="modules.js"></script>`.
+
+iPhone Safari: `<meta name="viewport" content="width=device-width, initial-scale=1">`. Buttons large. No horizontal scroll: use max-width container, flex-wrap.
+
+Also `touch-action: manipulation` on buttons to avoid double-tap zoom.
+
+Silent switch: maybe add note? Not necessary. Could also use `audioCtx.resume()` within the click handler. Good.
+
+Potential nuance: The page must "plays a short beep every 200 ms" — using rAF loop ties beep timing to frame rate; if tab inactive, rAF stops and beeps stop. Better use setInterval(200) independent of rAF for beeps. But reading updates via rAF. Let's use setInterval for beep scheduling while sound on:
+```
+setInterval(()=>{ if(soundOn){ const v = screenPan(x); if(v!=null) playBeep(v); } }, 200);
+```
+This keeps beeps every 200ms even if ball paused. Good. On sound toggle on, immediately beep. On toggle off, just stops future. Use setInterval once at init.
+
+x stored globally; beep uses current x. Good.
+
+Now, does the beep need to be same in both modes? Yes — playBeep fixed. Pan differs.
+
+Reading shows "current x and the value screen_pan(x) returned" — when paused and mode switched, value updates. rAF loop updates each frame; but if ball paused, rAF still runs (we keep loop). Yes keep loop running always; just don't advance x when paused.
+
+Now, "The page never computes the pan itself" — we only display v returned. Fine.
+
+Let's also add a small "mode" indicator? The buttons show selection via aria-pressed and class. Fine.
+
+Also maybe display `sha256`? Not needed. The entries include model, reply, sha256, bytes; page doesn't need them. Don't display.
+
+Error handling: If `window.PAN_MODULES` missing or invalid, show status in reading like "modules.js not loaded". Keep loop. Also catch instantiation errors; mark module as broken; selecting broken mode shows "unavailable". Keep simple.
+
+Let's write code.
+
+HTML skeleton:
+
+```
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DX-Ball sound effect</title>
+<style> ... </style>
+</head>
+<body>
+<main class="page">
+  <header>
+    <h1>DX-Ball sound effect</h1>
+    <p class="subtitle">A short beep follows the ball; pan comes from the selected module's <code>screen_pan(x)</code>.</p>
+  </header>
+
+  <section class="stage" aria-label="Track and reading">
+    <div class="track-wrap">
+      <div class="track" id="track">
+        <div class="ball" id="ball" aria-hidden="true"></div>
+      </div>
+    </div>
+    <div id="reading" class="reading" role="status" aria-live="polite">loading…</div>
+  </section>
+
+  <section class="controls" aria-label="Controls">
+    <button id="sound" type="button" aria-pressed="false">Sound: off</button>
+    <button id="mode-original" type="button" aria-pressed="true">Original</button>
+    <button id="mode-reversed" type="button" aria-pressed="false">Reversed</button>
+    <button id="pause" type="button" aria-pressed="false">Pause</button>
+  </section>
+
+  <footer>…maybe small note…</footer>
+</main>
+<script src="modules.js"></script>
+<script> ... </script>
+</body>
+</html>
+```
+
+Wait: reading should be "Beside the ball" — stage flex with track and reading side by side. On narrow screens wrap. Good.
+
+CSS:
+```
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:flex;justify-content:center;background:#0e1420;color:#e8edf5;font-family:system-ui,...;padding:16px;}
+.page{width:100%;max-width:880px;}
+h1{font-size:1.4rem;margin:0 0 4px;}
+.subtitle{margin:0 0 16px;color:#a9b6c8;font-size:.95rem;}
+.stage{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:16px;}
+.track-wrap{flex:1 1 320px;min-width:0;}
+.track{position:relative;height:64px;border-radius:14px;background:linear-gradient(#1b2433,#141b27);border:1px solid #2a3547;overflow:visible?;}
+.ball{position:absolute;top:50%;left:0;width:26px;height:26px;border-radius:50%;background:radial-gradient(circle at 35% 30%, #fff, #ffd166 45%, #f4a261 75%);box-shadow:0 0 14px rgba(255,209,102,.55);transform:translate(-50%,-50%);}
+.reading{flex:0 1 auto;min-width:220px;background:#111826;border:1px solid #26303f;border-radius:12px;padding:12px 14px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:1rem;line-height:1.5;white-space:nowrap;}
+```
+white-space nowrap might cause horizontal scroll on phone if too long; reading content like "Original · x: 640 · pan: -500" ~ 40 chars; at 1rem monospace ~ 40*9.6px=384px, might overflow on 360px phone. Better allow wrap: `white-space:normal; word-break:break-word;` and min-width smaller. Use font-size .95rem. Or structure reading as two lines: `x: 640` / `screen_pan: -500`. That's fine. Let's do two lines: line1 mode label? Keep: `x: 640` newline `screen_pan: -500`. That's compact. Requirement: shows current x and value. Good.
+
+Reading content: 
+```
+x: 320
+screen_pan: 123
+```
+Two lines. On phone fits.
+
+Controls: flex wrap gap 10px; buttons big.
+
+```
+.controls{display:flex;flex-wrap:wrap;gap:10px;}
+button{flex:1 1 140px;padding:14px 16px;font-size:1rem;border-radius:12px;border:1px solid #2c3a4f;background:#1c2634;color:#e8edf5;cursor:pointer;touch-action:manipulation;}
+button[aria-pressed="true"]{background:#2b3f5c?;border-color:#4f7fb8;box-shadow:inset 0 0 0 1px #4f7fb8;}
+button:focus-visible{outline:2px solid #7fb0ff;outline-offset:2px;}
+```
+
+Ball transition: none (we update via rAF). Maybe `transition:none`.
+
+JS:
+
+```
+(function(){
+  'use strict';
+  var track = document.getElementById('track');
+  var ball = document.getElementById('ball');
+  var reading = document.getElementById('reading');
+  var soundBtn = document.getElementById('sound');
+  var modeOriginal = document.getElementById('mode-original');
+  var modeReversed = document.getElementById('mode-reversed');
+  var pauseBtn = document.getElementById('pause');
+
+  var modules = {};
+  var loadError = null;
+  try{
+    var defs = window.PAN_MODULES;
+    if(!defs){ loadError = 'modules.js did not define window.PAN_MODULES'; }
+    else {
+      ['original','reversed'].forEach(function(key){
+        var entry = defs[key];
+        if(!entry || typeof entry.bytes !== 'string'){ loadError = 'missing bytes for ' + key; return; }
+        try{
+          var bin = atob(entry.bytes);
+          var bytes = new Uint8Array(bin.length);
+          for(var i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+          var mod = new WebAssembly.Module(bytes);
+          var inst = new WebAssembly.Instance(mod, {});
+          var fn = inst.exports.screen_pan;
+          if(typeof fn !== 'function'){ throw new Error('screen_pan export missing'); }
+          modules[key] = { label: entry.label || key, screen_pan: fn };
+        }catch(err){ loadError = key + ': ' + err.message; }
+      });
+    }
+  }catch(err){ loadError = err.message; }
+```
+
+Note: atob may throw on invalid base64. Good.
+
+State:
+```
+  var mode = 'original';
+  var soundOn = false;
+  var paused = false;
+  var x = 0;
+  var SPEED = 220; // units per second
+  var audioCtx = null;
+```
+
+selected(): `return modules[mode];`
+
+screenPan(x): returns number or null.
+
+Audio:
+```
+function ensureAudio(){
+  if(!audioCtx){
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if(!AC) return null;
+    audioCtx = new AC();
+  }
+  if(audioCtx.state === 'suspended'){ audioCtx.resume(); }
+  return audioCtx;
+}
+```
+
+playBeep(v):
+```
+function playBeep(v){
+  var ctx = ensureAudio(); // hmm ensureAudio resumes; fine but maybe don't create if off.
+```
+Only called when soundOn. Use audioCtx (already ensured at toggle). But if toggled on, ensureAudio in toggle. Then playBeep uses audioCtx; if null return.
+
+```
+function playBeep(v){
+  if(!audioCtx) return;
+  var t = audioCtx.currentTime;
+  var osc = audioCtx.createOscillator();
+  var gain = audioCtx.createGain();
+  var panner = audioCtx.createStereoPanner ? audioCtx.createStereoPanner() : null;
+  osc.type = 'square';
+  osc.frequency.setValueAtTime(880, t);
+  var p = Math.max(-1, Math.min(1, v / 500));
+  gain.gain.setValueAtTime(0.0001, t);
+  gain.gain.exponentialRampToValueAtTime(0.22, t + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);
+  osc.connect(gain);
+  if(panner){ panner.pan.setValueAtTime(p, t); gain.connect(panner); panner.connect(audioCtx.destination); }
+  else { gain.connect(audioCtx.destination); }
+  osc.start(t); osc.stop(t + 0.1);
+  osc.onended = function(){ try{ osc.disconnect(); gain.disconnect(); if(panner) panner.disconnect(); }catch(e){} };
+}
+```
+Panner creation each beep; fine.
+
+Fallback if no StereoPannerNode: requirement wants StereoPannerNode; Safari iPhone supports it (iOS 14.5+? Actually createStereoPanner supported since Safari 14.1). Requirement says current desktop browsers and Safari on iPhone — modern. I'll include fallback but still use StereoPannerNode when available. Hmm, fallback might violate "Use the Web Audio API and a StereoPannerNode" — but fallback only when unavailable. It's okay. Actually to strictly comply, maybe don't fallback; just require it. I'll keep a minimal fallback? The requirement says use StereoPannerNode; if unavailable, nothing works anyway. I'll just use it; no fallback, to avoid accidental deviation. But if createStereoPanner missing, page breaks silently. Modern Safari has it. Keep simple: use createStereoPanner directly.
+
+Beep every 200ms:
+```
+setInterval(function(){
+  if(!soundOn) return;
+  var mod = modules[mode];
+  if(!mod) return;
+  var v;
+  try { v = mod.screen_pan(x); } catch(e){ return; }
+  playBeep(v);
+}, 200);
+```
+x is integer 0..640.
+
+Rendering loop:
+```
+var lastTs = performance.now();
+function frame(ts){
+  var dt = (ts - lastTs)/1000; lastTs = ts;
+  if(dt > 0.1) dt = 0.1;
+  if(!paused){
+    x += Math.round(SPEED*dt);
+    if(x > 640) x = 0;
+  }
+  // ball position
+  ball.style.left = (x/640*100) + '%';
+  // reading
+  var mod = modules[mode];
+  var v = null;
+  if(mod){ try{ v = mod.screen_pan(x); }catch(e){ v = null; } }
+  reading.textContent = ...;
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+```
+
+Reading text:
+```
+var label = mod ? mod.label : '—';
+if(loadError && !mod){ reading.textContent = 'modules.js unavailable'; }
+else if(mod && v != null && typeof v === 'number'){ reading.textContent = 'x: ' + x + '\nscreen_pan: ' + v; }
+else reading.textContent = 'x: ' + x + '\nscreen_pan: unavailable';
+```
+Use two lines with \n and CSS white-space: pre-line. Good.
+
+Maybe also include selected mode label line: `Original · x: 320` / `screen_pan: 123`. Nice. Reading must show x and value; label extra fine. Let's do:
+line1: `x: 320`
+line2: `screen_pan: 123`
+Maybe line0: `Original`. Keep it simple: `${label} · x: ${x} · screen_pan: ${v}` with pre-line? Hmm. I'll do:
+```
+reading.textContent = label + '\nx: ' + x + '\nscreen_pan: ' + v;
+```
+Three lines. Good, readable.
+
+Buttons:
+```
+soundBtn.addEventListener('click', function(){
+  soundOn = !soundOn;
+  soundBtn.setAttribute('aria-pressed', String(soundOn));
+  soundBtn.textContent = soundOn ? 'Sound: on' : 'Sound: off';
+  if(soundOn){ ensureAudio(); var mod = modules[mode]; if(mod){ var v; try{v=mod.screen_pan(x);}catch(e){} if(typeof v==='number') playBeep(v);} }
+});
+```
+Also update lastBeep? Since setInterval handles beeps; immediate beep fine. Interval may double-beep if toggled on right at interval tick; acceptable.
+
+Mode buttons:
+```
+function setMode(m){
+  mode = m;
+  modeOriginal.setAttribute('aria-pressed', String(m==='original'));
+  modeReversed.setAttribute('aria-pressed', String(m==='reversed'));
+}
+modeOriginal.addEventListener('click', function(){ setMode('original'); });
+modeReversed.addEventListener('click', function(){ setMode('reversed'); });
+```
+Reading updates next frame.
+
+Pause:
+```
+pauseBtn.addEventListener('click', function(){
+  paused = !paused;
+  pauseBtn.setAttribute('aria-pressed', String(paused));
+  pauseBtn.textContent = paused ? 'Resume' : 'Pause';
+});
+```
+
+Also on any pointerdown, ensureAudio? Not needed; sound toggle handles. But maybe iOS requires resume on each gesture; click handler is a gesture. Good.
+
+Also handle `visibilitychange`? Not necessary.
+
+iOS: `audioCtx.resume()` returns promise; fine.
+
+Also handle Safari webkit prefix for StereoPannerNode? `audioCtx.createStereoPanner` exists in modern Safari; older iOS maybe `createStereoPanner` not available? Safari 14.1 supports. Fine.
+
+One more consideration: The ball moving via rAF; when paused, ball stays. Good.
+
+Reading update every frame even when paused — fine.
+
+Also, ensure no network requests: script src local. Good.
+
+Now about "sound effect recovered from the game DX-Ball (1996)" — just context; no special handling.
+
+Also, the ball should maybe be inside track; ball at x=0 sits at left edge with translateX(-50%) causing overflow outside track; track overflow visible; page no horizontal scroll because ball 26px at left edge extends 13px beyond; container has padding 16px, fine. Could set track overflow hidden and ball transform translate(-50%) — at edges ball half clipped. Alternatively inset ball by half width: left = (x/640 * (trackWidth - ballWidth) + ballWidth/2)/trackWidth. Simpler: use percentage with `left: calc(${x/640*100}% )` and clamp ball within: `left = (x/640) * 100%` with translateX(-50%); at 0, half outside. Slight overflow acceptable but might cause horizontal scroll? The page has padding; ball extends 13px beyond track-wrap; track-wrap has min-width; page max-width 880; fine. But to be safe, add `overflow:hidden` on track? Then ball half-clipped at edges. Better: make ball positioned with `left: calc(...)` using inset: 0 with padding. Simplest robust: keep overflow visible and give track horizontal padding via `.track { margin: 0 13px; }`? Hmm.
+
+Alternative: compute ball position in px: `var w = track.clientWidth; var px = (x/640) * w; ball.style.left = px + 'px';` with ball translateX(-50%). Same edge issue. Use `left = (x/640)*(w) + 0` and clamp px to [13, w-13]? Then ball doesn't reach edges exactly. Meh.
+
+Just let ball overflow slightly; track overflow visible; page padding 16px > 13px half ball, so no horizontal scroll. On phone, track-wrap min-width 0, ball extends 13px into page padding (16px) — fine.
+
+Actually simpler and cleaner: use `overflow:hidden` on track and give ball `transform: translate(-50%,-50%)`; at x=0, ball center at track's left edge, half outside hidden. Hmm, then at x=0 ball looks half-clipped. Not great but okay? I'd rather keep overflow visible.
+
+Alternatively use `clip-path`? Overkill. Keep visible.
+
+Ball size: 24px. At x=0 center at 0, extends 12px left of track; page padding 16px; fine.
+
+Reading element beside ball: stage flex; track-wrap flex 1; reading min-width 180px; on phone wrap. Good.
+
+Now the requirement "It works in current desktop browsers and in Safari on an iPhone, including when the iPhone's silent switch is on." Maybe they expect the audio to be audible regardless of silent switch. On iOS, Web Audio output may be silenced by silent switch? Let me think again. I recall: iOS silent switch mutes ringtone and alerts. Media (music/video) unaffected. Web Audio is media. So fine.
+
+But there is a known issue: iOS Safari mutes Web Audio when silent switch is on? Let me recall specific posts: "iOS mutes web audio on silent switch" — I vaguely remember that on iOS, the silent switch does mute Web Audio API sounds. Actually I recall discussions: "How to play sound on iPhone with silent switch on?" Answer: You can't; silent switch mutes all audio. Hmm.
+
+Let's recall iOS audio behavior precisely:
+- Silent switch: mutes ringer/alerts (sounds). It does NOT mute media playback. This is standard: music still plays with silent switch on.
+- But Web Audio API? There's a known behavior where iOS mutes Web Audio when silent switch is on? I remember a StackOverflow question "Web Audio API muted when silent switch on iOS". Hmm.
+
+Actually, I recall that in iOS, Web Audio is affected by the silent switch because the audio session is "ambient"? Not sure. The requirement says the page must work "including when the iPhone's silent switch is on". Perhaps this is a hint that the page must use the Web Audio API in a way that bypasses silent switch? There's no legitimate way to bypass the silent switch. Unless... they mean the page should still function (beep plays) even when silent switch is on, which might require `audioCtx.resume()`? Hmm.
+
+Wait — maybe the intended solution is different: Use `AudioContext` with `webkitAudioContext`; on iOS, to play audio with silent switch on, one can... no.
+
+Let me search memory: iOS has "silent switch" which mutes the ringer and "system sounds". Media playback (music, podcasts, videos) is unaffected. Web Audio is used by games; I believe Web Audio is also unaffected (it's media). Actually I recall games on iPhone with silent switch on still play sound. Yes, games play sound with silent switch on. So fine.
+
+Thus requirement simply means: use Web Audio API (which plays regardless of silent switch), and ensure Safari iOS compatibility (user gesture resume, webkit prefix). Good.
+
+Now, one more: "It makes no network requests and uses no libraries." The script tag to modules.js is a local request; allowed since they specify it.
+
+Let's also ensure buttons don't trigger double-tap zoom: touch-action manipulation; viewport user-scalable? Keep default but touch-action handles.
+
+Now let's also think about beep timing: "every 200 ms" — setInterval 200ms. Fine.
+
+Reading shows current x and screen_pan(x). When sound is off, still shows. Yes.
+
+Now, "When the ball is paused and the person switches modes, the shown value is the selected module's value for that x." Our loop updates reading every frame, so yes.
+
+Also when sound on and ball paused, beeps every 200ms continue. Good.
+
+Edge: atob with base64 containing whitespace? Probably fine; could strip whitespace: `entry.bytes.replace(/\s/g,'')`. Do that.
+
+Also validate x range: x in 0..640; screen_pan called with integer. Good.
+
+Now, potential test: They might check that page shows correct values by simulating. Reading text should include x and screen_pan. Let's format exactly: `x: 0` and `screen_pan: 123`. Maybe include labels "x" and "screen_pan". Good.
+
+Also maybe the test checks that "sound" button toggles aria-pressed; fine.
+
+Let's write final code carefully.
+
+Also, the ball position uses `x` integer; but ball moves smoothly? At 220 units/s and 60fps, x increments ~3.7 → rounded to integer each frame? If we do `x += SPEED*dt` and then `x = Math.round(x)`? That would lose fractional progress; increments alternate 3/4, fine. But rounding each frame could cause x to stick? No, fractional lost each frame but rounding adds back ~0.5 avg; fine. Simpler: keep `pos` float and compute `x = Math.round(pos)` for display/pan; ball left uses pos (smooth). That gives smooth motion and integer x for logic. Let's do that:
+
+```
+var pos = 0; // 0..640 float
+var x = 0; // integer
+function frame(ts){
+  ...
+  if(!paused){ pos += SPEED*dt; if(pos >= 640){ pos = 0; } }
+  x = Math.round(pos); if(x > 640) x = 640; if(x<0) x=0;
+  ball.style.left = (pos/640*100) + '%';
+  ...
+}
+```
+At wrap, pos=0, x=0. Good.
+
+Hmm, when pos reaches 640, ball at right edge; then reset. Fine.
+
+Alternatively use `Math.floor(pos)`; rounding fine.
+
+Now reading update uses x integer. Good.
+
+Beep uses x integer. Good.
+
+Speed: 640 units in ~3s → SPEED ≈ 213. Use 200 units/s → 3.2s sweep. Good.
+
+Beep every 200ms: ~16 beeps per sweep. Fine.
+
+Now, audio context creation: create on sound button toggle. But also maybe create on any button click to avoid delay; only needed for sound. Fine.
+
+Potential issue: iOS requires AudioContext resume inside the click event handler synchronously; `ensureAudio()` called synchronously in click handler; `resume()` returns promise but that's fine.
+
+Also, when sound turned on and context state 'running', beep plays. Good.
+
+Now, one more nuance: "Every beep is the same in both modes: same pitch, same volume, same length." Our playBeep fixed. Good.
+
+Also "The pan of each beep comes from the value v that screen_pan(x) returns for the ball's position at that moment." — We call screen_pan at interval time with current x; same as reading. Good.
+
+Let's also add `aria-live` off for reading? aria-live polite could be chatty every frame; better remove aria-live or set to off. Reading updates every frame; screen readers would be overwhelmed. Remove aria-live. Keep role="status"? That implies live region; avoid. Just a div.
+
+Now write the final HTML. Also include a small note about silent switch? Maybe not needed. Could add footer: "Sound plays via Web Audio; the iPhone silent switch does not mute it." Hmm, is that true? Risky claim. Don't include.
+
+Maybe add footer note: "Same beep in both modes; only the pan changes." Fine.
+
+Let's write code.
+
+```html
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DX-Ball sound effect</title>
+<style>
+:root{
+  --bg:#0d1320; --panel:#151d2b; --panel-border:#273349;
+  --text:#e9eef6; --muted:#9fb0c6; --accent:#ffd166; --btn:#1d2837; --btn-border:#31405a;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  min-height:100vh;
+  background:radial-gradient(1200px 600px at 50% -10%, #16202f 0%, var(--bg) 60%);
+  color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  padding:18px 16px 28px;
+  -webkit-text-size-adjust:100%;
+}
+.page{max-width:860px;margin:0 auto;}
+h1{font-size:1.35rem;margin:0 0 6px;letter-spacing:.2px;}
+.subtitle{margin:0 0 18px;color:var(--muted);font-size:.95rem;line-height:1.45;}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:#0a0f18;border:1px solid #22304a;border-radius:6px;padding:0 5px;font-size:.85em;}
+.stage{display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin:0 0 16px;}
+.track-wrap{flex:1 1 300px;min-width:0;padding:0 2px;}
+.track{
+  position:relative;height:66px;border-radius:16px;
+  background:linear-gradient(180deg,#1b2536 0%,#121a28 100%);
+  border:1px solid var(--panel-border);
+  box-shadow:inset 0 2px 10px rgba(0,0,0,.45);
+}
+.track::before{ /* tick marks */
+  content:"";position:absolute;left:0;right:0;top:50%;height:2px;transform:translateY(-50%);
+  background:repeating-linear-gradient(90deg,#2b3a55 0 2px,transparent 2px 64px);
+  opacity:.6;
+}
+.ball{
+  position:absolute;top:50%;left:0;width:26px;height:26px;border-radius:50%;
+  transform:translate(-50%,-50%);
+  background:radial-gradient(circle at 34% 30%, #fff8e6 0%, #ffd166 38%, #f4a261 72%, #d97706 100%);
+  box-shadow:0 0 16px rgba(255,209,102,.55), inset 0 -3px 6px rgba(0,0,0,.25);
+  pointer-events:none;
+}
+.reading{
+  flex:0 0 auto;min-width:200px;max-width:100%;
+  background:var(--panel);border:1px solid var(--panel-border);border-radius:14px;
+  padding:12px 14px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:1rem;line-height:1.6;white-space:pre-line;word-break:break-word;
+}
+.reading .label{color:var(--accent);}
+```
+Hmm, I want reading lines: mode label line, x line, pan line. Using pre-line and plain textContent can't color label separately. Could set textContent only; keep single color. Or build with spans via innerHTML — but values are numbers from screen_pan, safe (numbers). We can set innerHTML with spans; v is a number from wasm, but could be weird string? screen_pan returns integer; we can coerce display with String(v). Safe enough but avoid innerHTML; use textContent. Keep monochrome. Fine.
+
+```
+.controls{display:flex;flex-wrap:wrap;gap:10px;}
+button{
+  flex:1 1 150px;padding:14px 16px;font-size:1rem;font-weight:600;color:var(--text);
+  background:var(--btn);border:1px solid var(--btn-border);border-radius:12px;cursor:pointer;
+  touch-action:manipulation;-webkit-tap-highlight-color:transparent;
+  transition:background .12s,border-color .12s,transform .05s;
+}
+button:active{transform:translateY(1px);}
+button[aria-pressed="true"]{background:#28405f;border-color:#4d74a6;box-shadow:inset 0 0 0 1px #4d74a6;}
+button:focus-visible{outline:2px solid #7fb0ff;outline-offset:2px;}
+.foot{margin-top:14px;color:var(--muted);font-size:.85rem;line-height:1.5;}
+@media (max-width:520px){
+  .reading{width:100%;}
+  button{flex:1 1 45%;}
+}
+```
+
+Now JS.
+
+Also include `id="track"` not necessary but fine.
+
+Potential test expects `id="sound"` etc. — yes.
+
+Now JS code:
+
+```js
+(function () {
+  'use strict';
+
+  var ball = document.getElementById('ball');
+  var track = document.getElementById('track');
+  var reading = document.getElementById('reading');
+  var soundBtn = document.getElementById('sound');
+  var originalBtn = document.getElementById('mode-original');
+  var reversedBtn = document.getElementById('mode-reversed');
+  var pauseBtn = document.getElementById('pause');
+
+  var MAX_X = 640;
+  var SPEED = 200; // units per second
+
+  var modules = { original: null, reversed: null };
+  var loadNote = null;
+
+  function loadModules() {
+    var defs = window.PAN_MODULES;
+    if (!defs) { loadNote = 'modules.js did not define window.PAN_MODULES'; return; }
+    ['original', 'reversed'].forEach(function (key) {
+      var entry = defs[key];
+      if (!entry || typeof entry.bytes !== 'string') {
+        loadNote = key + ': missing base64 bytes'; return;
+      }
+      try {
+        var b64 = entry.bytes.replace(/\s+/g, '');
+        var bin = atob(b64);
+        var bytes = new Uint8Array(bin.length);
+        for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        var module = new WebAssembly.Module(bytes);
+        var instance = new WebAssembly.Instance(module, {});
+        var fn = instance.exports && instance.exports.screen_pan;
+        if (typeof fn !== 'function') throw new Error('missing screen_pan export');
+        modules[key] = { label: (entry && entry.label) || key, screen_pan: fn };
+      } catch (err) {
+        loadNote = key + ': ' + (err && err.message ? err.message : err);
+      }
+    });
+  }
+  loadModules();
+```
+
+Hmm loadNote: if both fail, only last note. Fine. If one fails, still allow the other.
+
+State and audio:
+
+```js
+  var mode = 'original';
+  var soundOn = false;
+  var paused = false;
+  var pos = 0;
+  var x = 0;
+  var audioCtx = null;
+
+  function selectedModule() { return modules[mode] || null; }
+
+  function screenPan(v) {
+    var mod = selectedModule();
+    if (!mod) return null;
+    try {
+      var r = mod.screen_pan(v);
+      if (typeof r === 'number' && isFinite(r)) return Math.round(r);
+      return null;
+    } catch (e) { return null; }
+  }
+```
+
+Wait: should we round the returned value? "returns an integer from -500 to 500". Page shouldn't compute pan; rounding is a computation? Rounding could violate "The page never computes the pan itself." Better return as-is (the number returned). Don't modify. Use as-is. Display with String(r). Panner value v/500 as-is. So:
+
+```js
+  function screenPan(xv) {
+    var mod = selectedModule();
+    if (!mod) return null;
+    try { return mod.screen_pan(xv); } catch (e) { return null; }
+  }
+```
+Then validate type? If returns non-number, display weird. Validate: if typeof !== 'number' return null. That's not computing pan; it's validation. Fine.
+
+Audio:
+
+```js
+  function ensureAudio() {
+    if (!audioCtx) {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      try { audioCtx = new AC(); } catch (e) { return null; }
+    }
+    if (audioCtx.state === 'suspended') {
+      var p = audioCtx.resume();
+      if (p && p.catch) p.catch(function () {});
+    }
+    return audioCtx;
+  }
+
+  function playBeep(v) {
+    if (!audioCtx) return;
+    if (typeof v !== 'number' || !isFinite(v)) return;
+    var ctx = audioCtx;
+    var t = ctx.currentTime;
+    var dur = 0.1;
+    var osc = ctx.createOscillator();
+    var gain = ctx.createGain();
+    var panner = ctx.createStereoPanner();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(880, t);
+    var pan = v / 500;
+    if (pan > 1) pan = 1;
+    if (pan < -1) pan = -1;
+    panner.pan.setValueAtTime(pan, t);
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(0.2, t + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + dur - 0.01);
+    osc.connect(gain);
+    gain.connect(panner);
+    panner.connect(ctx.destination);
+    osc.start(t);
+    osc.stop(t + dur);
+    osc.onended = function () {
+      try { osc.disconnect(); gain.disconnect(); panner.disconnect(); } catch (e) {}
+    };
+  }
+```
+
+Note: clamping pan — is that "computing pan"? Clamping to [-1,1] is display-level; v is -500..500 per spec, so no clamp needed. Remove clamp; just v/500. Keep strict: `var pan = v / 500;`. If module returns out of range, panner clamps automatically (Web Audio clamps pan to -1..1? Actually pan value beyond range is clamped by the spec). Just pass v/500.
+
+Beep interval:
+
+```js
+  setInterval(function () {
+    if (!soundOn) return;
+    var v = screenPan(x);
+    if (typeof v === 'number' && isFinite(v)) playBeep(v);
+  }, 200);
+```
+
+Render loop:
+
+```js
+  var lastTs = performance.now();
+  function frame(ts) {
+    var dt = (ts - lastTs) / 1000;
+    lastTs = ts;
+    if (dt > 0.1) dt = 0.1;
+    if (!paused) {
+      pos += SPEED * dt;
+      if (pos >= MAX_X) pos -= MAX_X; // hmm wrap to 0? pos -= 640 → 0..; if pos slightly over, wraps near 0. Fine.
+      // Actually reset to 0: if (pos >= MAX_X) pos = 0;
+    }
+    x = Math.round(pos);
+    if (x < 0) x = 0;
+    if (x > MAX_X) x = MAX_X;
+    ball.style.left = (pos / MAX_X * 100) + '%';
+    renderReading();
+    requestAnimationFrame(frame);
+  }
+```
+
+Wrap: if pos >= 640, pos = 0? Then ball jumps from right edge to left. Good: `if (pos >= MAX_X) pos = 0;` But then x = 0 immediately; fine.
+
+Actually with pos=0, ball at left. Good.
+
+renderReading:
+
+```js
+  function renderReading() {
+    var mod = selectedModule();
+    var lines = [];
+    lines.push(mod ? mod.label : 'unavailable');
+    lines.push('x: ' + x);
+    if (mod) {
+      var v = screenPan(x);
+      lines.push('screen_pan: ' + (typeof v === 'number' ? String(v) : 'error'));
+    } else {
+      lines.push('screen_pan: —');
+    }
+    reading.textContent = lines.join('\n');
+  }
+```
+
+Hmm, mode label line: "Original"/"Reversed". Good.
+
+Maybe show loadNote if present. If both modules failed, reading shows "unavailable" label and screen_pan '—'. Also maybe show note in footer? Could set a status line. Add a small status element? Not required. Keep reading.
+
+Actually if loadNote, maybe show in footer: `<p class="foot" id="status">`. Could set status text. Let's add id="status"? Not required; fine to add. But tests might check specific ids only; extra ids fine. Keep minimal: no extra status element; reading shows label 'unavailable' and note. Hmm, showing loadNote helps debugging. Add small `<p class="foot" id="note">` showing loadNote or default text. Let's do:
+
+```html
+<p class="foot" id="note">Both modules are loaded from modules.js; only the selected one is called.</p>
+```
+JS sets note textContent if loadNote: 'Could not load modules.js: ' + loadNote. Else keep default. Good.
+
+Buttons:
+
+```js
+  soundBtn.addEventListener('click', function () {
+    soundOn = !soundOn;
+    soundBtn.setAttribute('aria-pressed', soundOn ? 'true' : 'false');
+    soundBtn.textContent = soundOn ? 'Sound: on' : 'Sound: off';
+    if (soundOn) {
+      ensureAudio();
+      var v = screenPan(x);
+      if (typeof v === 'number' && isFinite(v)) playBeep(v);
+    }
+  });
+
+  originalBtn.addEventListener('click', function () { setMode('original'); });
+  reversedBtn.addEventListener('click', function () { setMode('reversed'); });
+  function setMode(m) {
+    mode = m;
+    originalBtn.setAttribute('aria-pressed', m === 'original' ? 'true' : 'false');
+    reversedBtn.setAttribute('aria-pressed', m === 'reversed' ? 'true' : 'false');
+    renderReading();
+  }
+
+  pauseBtn.addEventListener('click', function () {
+    paused = !paused;
+    pauseBtn.setAttribute('aria-pressed', paused ? 'true' : 'false');
+    pauseBtn.textContent = paused ? 'Resume' : 'Pause';
+  });
+
+  requestAnimationFrame(frame);
+})();
+```
+
+Initial reading render: call renderReading() once before rAF.
+
+Also note: `renderReading` calls screenPan(x) every frame; that's calling the module every frame — fine.
+
+Wait: calling screen_pan every frame and every 200ms; reading shows value. Good.
+
+One concern: `setInterval` continues even when tab hidden; browsers throttle intervals; beeps may skip. Acceptable. Could use rAF-based beep scheduling to tie to frames; but rAF stops when hidden, which would pause beeps — maybe desired? "plays a short beep every 200 ms" — while page visible. Either fine. setInterval is fine.
+
+Also, iOS: setInterval throttled to 1s when in background; fine.
+
+Now the note about silent switch: maybe the page should attempt to create audio context on any user interaction (e.g., first click anywhere) to satisfy iOS. Our sound button click does. Also mode/pause clicks don't need audio. Fine.
+
+Also, iOS Safari requires `AudioContext` resume inside a user gesture; our beep interval runs after gesture, fine.
+
+Edge: On iOS, `createStereoPanner` may not exist? It does in iOS 14.1+. Requirement "current desktop browsers and Safari on an iPhone" — fine.
+
+Let's also handle the case where `window.PAN_MODULES` is defined but the script failed to load (network? no network). Fine.
+
+Now, do we need to prevent the ball from moving when tab hidden? rAF handles.
+
+Double-check requirement: "A ball moves across a horizontal track from left to right, again and again. Its position is an integer x from 0 through 640." — yes.
+
+"While the sound is on, the page plays a short beep every 200 ms." — yes.
+
+"Beside the ball, the page shows the current x and the value screen_pan(x) returned" — reading beside track. Yes.
+
+"When the ball is paused and the person switches modes, the shown value is the selected module's value for that x." — yes.
+
+"The page never computes the pan itself. Every value it shows or plays comes from calling screen_pan on the selected module." — yes. Note: x is computed by the page (ball position) — that's allowed; pan values come from screen_pan.
+
+Controls ids — yes.
+
+Now, one more consideration: The beep should be "every 200 ms" — our interval fires every 200ms but actual audio scheduling uses currentTime at fire time; fine.
+
+Also, when sound toggled on, we play an immediate beep and setInterval will fire within 200ms — okay.
+
+Let's also consider that when switching modes while sound on, next beep uses new module; reading updates immediately. Good.
+
+Now, should the pause button also pause the beep timer? Requirement: "While the sound is on, the page plays a short beep every 200 ms." Pause only pauses the ball. Keep beeps.
+
+Alright, also add `aria-pressed` initial values in HTML: sound false, original true, reversed false, pause false.
+
+Text initial: sound "Sound: off", pause "Pause".
+
+Note default text: "Same beep in both modes — only which module's screen_pan(x) is called changes." Good.
+
+Now, potential subtle issue: `reading.textContent` with '\n' and `white-space:pre-line` renders lines. Good.
+
+Also, `x` displayed as integer; pos float not displayed. Good.
+
+Let me also think about `pos` wrap: `if (pos >= MAX_X) pos = 0;` — then ball jumps to left edge; fine.
+
+But wait: when paused, pos unchanged; x unchanged; reading still recomputed each frame (screen_pan called each frame). Fine.
+
+One more: `renderReading` each frame calls `screenPan(x)` which calls module; module returns integer; display `String(v)`. If v is a float (shouldn't be), display float; fine.
+
+Now the note: if loadNote, set note element text. If not, keep default text. Also maybe if one module fails, note mentions it; the other works.
+
+Let's also consider test environment: They might load page in headless browser with modules.js present. `atob` available. `new WebAssembly.Module` available. Good.
+
+Now, is there any requirement about `modules.js` loading failure? No.
+
+Let's write the final HTML fully.
+
+Also add `<meta name="theme-color" content="#0d1320">`? Nice touch.
+
+Now, final code:
+
+```html
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1320">
+<title>DX-Ball sound effect</title>
+<style>
+...
+</style>
+</head>
+<body>
+<main class="page">
+  <header>
+    <h1>DX-Ball sound effect</h1>
+    <p class="subtitle">A short beep follows the ball. Its pan comes from <code>screen_pan(x)</code> in the selected WebAssembly module — Original or Reversed.</p>
+  </header>
+
+  <section class="stage" aria-label="Ball track and reading">
+    <div class="track-wrap">
+      <div class="track" id="track">
+        <div class="ball" id="ball" aria-hidden="true"></div>
+      </div>
+    </div>
+    <div id="reading" class="reading">loading…</div>
+  </section>
+
+  <section class="controls" aria-label="Controls">
+    <button id="sound" type="button" aria-pressed="false">Sound: off</button>
+    <button id="mode-original" type="button" aria-pressed="true">Original</button>
+    <button id="mode-reversed" type="button" aria-pressed="false">Reversed</button>
+    <button id="pause" type="button" aria-pressed="false">Pause</button>
+  </section>
+
+  <p class="foot" id="note">Same pitch, volume and length in both modes — only which module is called changes.</p>
+</main>
+<script src="modules.js"></script>
+<script>
+...
+</script>
+</body>
+</html>
+```
+
+Now full JS. Also ensure `renderReading` defined before first call; function declarations hoisted; fine.
+
+Let me write the complete JS carefully:
+
+```js
+(function () {
+  'use strict';
+
+  var MAX_X = 640;
+  var SPEED = 200;
+
+  var ball = document.getElementById('ball');
+  var reading = document.getElementById('reading');
+  var note = document.getElementById('note');
+  var soundBtn = document.getElementById('sound');
+  var originalBtn = document.getElementById('mode-original');
+  var reversedBtn = document.getElementById('mode-reversed');
+  var pauseBtn = document.getElementById('pause');
+
+  var modules = { original: null, reversed: null };
+  var loadNote = null;
+
+  function loadModules() {
+    var defs = window.PAN_MODULES;
+    if (!defs) {
+      loadNote = 'modules.js did not define window.PAN_MODULES';
+      return;
+    }
+    ['original', 'reversed'].forEach(function (key) {
+      var entry = defs[key];
+      if (!entry || typeof entry.bytes !== 'string') {
+        loadNote = key + ': missing base64 bytes';
+        return;
+      }
+      try {
+        var b64 = entry.bytes.replace(/\s+/g, '');
+        var bin = atob(b64);
+        var bytes = new Uint8Array(bin.length);
+        for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        var mod = new WebAssembly.Module(bytes);
+        var instance = new WebAssembly.Instance(mod, {});
+        var fn = instance.exports && instance.exports.screen_pan;
+        if (typeof fn !== 'function') throw new Error('missing screen_pan export');
+        modules[key] = {
+          label: (entry.label && typeof entry.label === 'string') ? entry.label : key,
+          screen_pan: fn
+        };
+      } catch (err) {
+        loadNote = key + ': ' + (err && err.message ? err.message : String(err));
+      }
+    });
+  }
+
+  loadModules();
+
+  if (loadNote) note.textContent = 'Could not load modules.js — ' + loadNote + '.';
+
+  var mode = 'original';
+  var soundOn = false;
+  var paused = false;
+  var pos = 0;
+  var x = 0;
+  var audioCtx = null;
+
+  function selectedModule() { return modules[mode] || null; }
+
+  function screenPan(xv) {
+    var mod = selectedModule();
+    if (!mod) return null;
+    var r;
+    try { r = mod.screen_pan(xv); } catch (e) { return null; }
+    if (typeof r !== 'number' || !isFinite(r)) return null;
+    return r;
+  }
+
+  function ensureAudio() {
+    if (!audioCtx) {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      try { audioCtx = new AC(); } catch (e) { return null; }
+    }
+    if (audioCtx.state === 'suspended') {
+      try { var p = audioCtx.resume(); if (p && typeof p.catch === 'function') p.catch(function () {}); } catch (e) {}
+    }
+    return audioCtx;
+  }
+
+  function playBeep(v) {
+    var ctx = ensureAudio();
+    if (!ctx) return;
+    var t = ctx.currentTime;
+    var dur = 0.1;
+    var osc = ctx.createOscillator();
+    var gain = ctx.createGain();
+    var panner = ctx.createStereoPanner();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(880, t);
+    panner.pan.setValueAtTime(v / 500, t);
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(0.2, t + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + dur - 0.01);
+    osc.connect(gain);
+    gain.connect(panner);
+    panner.connect(ctx.destination);
+    osc.start(t);
+    osc.stop(t + dur);
+    osc.onended = function () {
+      try { osc.disconnect(); gain.disconnect(); panner.disconnect(); } catch (e) {}
+    };
+  }
+
+  function renderReading() {
+    var mod = selectedModule();
+    var lines = [];
+    lines.push(mod ? mod.label : 'unavailable');
+    lines.push('x: ' + x);
+    var v = mod ? screenPan(x) : null;
+    lines.push('screen_pan: ' + (typeof v === 'number' ? String(v) : '—'));
+    reading.textContent = lines.join('\n');
+  }
+
+  function setMode(m) {
+    mode = m;
+    originalBtn.setAttribute('aria-pressed', m === 'original' ? 'true' : 'false');
+    reversedBtn.setAttribute('aria-pressed', m === 'reversed' ? 'true' : 'false');
+    renderReading();
+  }
+
+  soundBtn.addEventListener('click', function () {
+    soundOn = !soundOn;
+    soundBtn.setAttribute('aria-pressed', soundOn ? 'true' : 'false');
+    soundBtn.textContent = soundOn ? 'Sound: on' : 'Sound: off';
+    if (soundOn) {
+      ensureAudio();
+      var v = screenPan(x);
+      if (typeof v === 'number') playBeep(v);
+    }
+  });
+
+  originalBtn.addEventListener('click', function () { setMode('original'); });
+  reversedBtn.addEventListener('click', function () { setMode('reversed'); });
+
+  pauseBtn.addEventListener('click', function () {
+    paused = !paused;
+    pauseBtn.setAttribute('aria-pressed', paused ? 'true' : 'false');
+    pauseBtn.textContent = paused ? 'Resume' : 'Pause';
+  });
+
+  setInterval(function () {
+    if (!soundOn) return;
+    var v = screenPan(x);
+    if (typeof v === 'number') playBeep(v);
+  }, 200);
+
+  var lastTs = performance.now();
+  function frame(ts) {
+    var dt = (ts - lastTs) / 1000;
+    lastTs = ts;
+    if (dt > 0.1) dt = 0.1;
+    if (dt < 0) dt = 0;
+    if (!paused) {
+      pos += SPEED * dt;
+      if (pos >= MAX_X) pos = 0;
+    }
+    x = Math.round(pos);
+    if (x < 0) x = 0;
+    if (x > MAX_X) x = MAX_X;
+    ball.style.left = (pos / MAX_X * 100) + '%';
+    renderReading();
+    requestAnimationFrame(frame);
+  }
+
+  renderReading();
+  requestAnimationFrame(frame);
+})();
+```
+
+Wait: `playBeep` calls `ensureAudio()` every beep, which calls `audioCtx.resume()` when suspended — every 200ms; resume() on running context is cheap? It returns a promise; calling every 200ms okay. But better: playBeep should not re-ensure; just use audioCtx. Change playBeep to use existing audioCtx:
+
+```js
+function playBeep(v){
+  if(!audioCtx) return;
+  ...
+}
+```
+And sound toggle ensures audio. Good. But beep interval calls playBeep even if audioCtx creation failed; guarded.
+
+Also note: on sound toggle on, we call ensureAudio() then playBeep(v) which uses audioCtx — fine.
+
+One more: beep when paused and sound on: interval fires; x fixed; beep with same pan. Good.
+
+Reading update every frame — calling screenPan every frame; if module throws, returns null; reading shows '—'. Fine.
+
+Now, one subtle thing: `renderReading` is called every frame; textContent set every frame even if unchanged; fine but could avoid by comparing. Not needed.
+
+Also note: ball uses pos for left; when paused, pos unchanged; ball stays. Good.
+
+Now the note text: default "Same pitch, volume and length in both modes — only which module is called changes." Good.
+
+CSS final. Let me also ensure no sideways scroll on phone: `.reading` min-width 200px; on 320px phone, 200 + padding fine; stage wraps. Track-wrap min-width 0 flex 1 1 300px; on narrow, flex-basis 300px > container width 320-32=288? flex-basis 300px with min-width 0 and flex-shrink default 1 → shrinks to 288. Good.
+
+Buttons flex 1 1 150px → on phone two per row. Good.
+
+Now, the "reading beside the ball" — on phone it wraps below the track; acceptable ("readable on a phone, without scrolling sideways").
+
+Now, the requirement "It makes no network requests" — script src local; fine.
+
+Let me also consider whether we should use `WebAssembly.instantiate` vs `new WebAssembly.Module`. `new WebAssembly.Module` synchronous is fine in all modern browsers.
+
+One more: `entry.bytes` might be base64 with newlines; we strip whitespace. Good.
+
+Now finalize CSS details and ensure `white-space:pre-line` on reading.
+
+Also, maybe include tick labels 0 and 640 under track? Not required; skip.
+
+Let me write the final answer HTML.
+
+Also, the title: "DX-Ball sound effect".
+
+Double-check: "A WebAssembly function decides where each beep sounds." — yes.
+
+"The person using the page switches between them and hears the difference." — yes.
+
+Edge: When sound is off and user switches mode, reading updates. Yes.
+
+Now, also think about whether reading should show value even when modules fail: shows '—'. Fine.
+
+Potential test: They may simulate clicking sound button and check that a beep plays? They can't hear; maybe they check AudioContext state or just that button toggles text. Fine.
+
+Also, "sound" button "one tap or click turns the sound on, the next one turns it off" — yes.
+
+Alright. Also, maybe add `id="track"` unused; fine.
+
+Now produce final answer: only HTML document.
+
+Let me write out full CSS with care:
+
+```css
+:root{
+  --bg:#0d1320;
+  --panel:#151d2b;
+  --panel-border:#273349;
+  --text:#e9eef6;
+  --muted:#9fb0c6;
+  --accent:#ffd166;
+  --btn:#1d2837;
+  --btn-border:#31405a;
+  --btn-active:#28405f;
+  --btn-active-border:#4d74a6;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  min-height:100vh;
+  background:radial-gradient(1100px 520px at 50% -12%, #182234 0%, var(--bg) 62%);
+  color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  padding:18px 16px 30px;
+  -webkit-text-size-adjust:100%;
+}
+.page{max-width:860px;margin:0 auto}
+h1{font-size:1.35rem;margin:0 0 6px;letter-spacing:.2px}
+.subtitle{margin:0 0 18px;color:var(--muted);font-size:.95rem;line-height:1.45}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:#0a0f18;border:1px solid #22304a;border-radius:6px;padding:0 5px;font-size:.85em}
+.stage{display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin:0 0 16px}
+.track-wrap{flex:1 1 300px;min-width:0}
+.track{position:relative;height:66px;border-radius:16px;background:linear-gradient(180deg,#1b2536 0%,#121a28 100%);border:1px solid var(--panel-border);box-shadow:inset 0 2px 10px rgba(0,0,0,.45)}
+.track::before{content:"";position:absolute;left:0;right:0;top:50%;height:2px;transform:translateY(-50%);background:repeating-linear-gradient(90deg,#2b3a55 0 2px,transparent 2px 64px);opacity:.55}
+.ball{position:absolute;top:50%;left:0;width:26px;height:26px;border-radius:50%;transform:translate(-50%,-50%);background:radial-gradient(circle at 34% 30%, #fff8e6 0%, #ffd166 38%, #f4a261 72%, #d97706 100%);box-shadow:0 0 16px rgba(255,209,102,.55), inset 0 -3px 6px rgba(0,0,0,.25);pointer-events:none}
+.reading{flex:0 1 auto;min-width:200px;background:var(--panel);border:1px solid var(--panel-border);border-radius:14px;padding:12px 14px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:1rem;line-height:1.6;white-space:pre-line;word-break:break-word}
+.controls{display:flex;flex-wrap:wrap;gap:10px}
+button{flex:1 1 150px;padding:14px 16px;font-size:1rem;font-weight:600;color:var(--text);background:var(--btn);border:1px solid var(--btn-border);border-radius:12px;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;transition:background .12s ease,border-color .12s ease,transform .05s ease}
+button:active{transform:translateY(1px)}
+button[aria-pressed="true"]{background:var(--btn-active);border-color:var(--btn-active-border);box-shadow:inset 0 0 0 1px var(--btn-active-border)}
+button:focus-visible{outline:2px solid #7fb0ff;outline-offset:2px}
+.foot{margin:14px 0 0;color:var(--muted);font-size:.85rem;line-height:1.5}
+@media (max-width:520px){
+  .reading{flex-basis:100%;min-width:0}
+  button{flex:1 1 45%}
+}
+```
+
+Ball left: percentage; ball at 0% center at left edge, extends 13px left of track; track-wrap has no padding; page padding 16px; fine. Actually .track-wrap min-width 0; ball extends 13px into the gap between track-wrap and reading or into page padding; on phone wrap, track full width; ball extends 13px into page padding (16px) — fine.
+
+Now finalize. Also ensure `renderReading` called after mode set; yes.
+
+One more consideration: On iOS Safari, `new WebAssembly.Module(bytes)` — bytes as Uint8Array; fine.
+
+`atob` on large base64 fine.
+
+Also: `instance.exports.screen_pan` — function. Good.
+
+Potential issue: `WebAssembly.Module` throws TypeError for invalid bytes; caught. Good.
+
+Now produce final answer.

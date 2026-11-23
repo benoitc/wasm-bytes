@@ -53,6 +53,8 @@ Each model received the prompt once, through the Claude Code CLI with tools off.
 | Claude Opus 5.5 | 15,242 bytes | Audio session, with the silent media element as a fallback when that API is missing |
 | Claude Haiku 5.5 | 7,456 bytes | Audio session only |
 
+A local model, Inkling 2 Mini (`inkling-2-mini:26b-a5b-nvfp4`, through Ollama), received the same prompt once. Its 9,403-byte page passes 12 of the 13 checks. It uses the recorded modules for every value, pans every beep correctly, and its controls work. It never asks for media playback, so `ios_audio` fails. On an iPhone with the silent switch on, its sound would probably stay muted. Its verdict is `ui_failed`, so the site does not list it. [Inkling's page](../trials/ui/inkling-2-mini-1/reply.txt)
+
 All three pages create a fresh oscillator for each beep, pan it with a `StereoPannerNode`, and call `screen_pan` on the selected module for every value. Before publishing, each page was read in full. None makes a network request, uses storage, or evaluates code. [Sonnet](../trials/ui/claude-sonnet-5-5-1/reply.txt) · [Opus](../trials/ui/claude-opus-5-5-1/reply.txt) · [Haiku](../trials/ui/claude-haiku-5-5-1/reply.txt)
 
 You can open each page on the site. It loads the same recorded modules as the hand-written demo. [Pages the models wrote](https://benoitc.github.io/wasm-bytes/demo/ui/)
