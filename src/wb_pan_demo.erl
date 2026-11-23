@@ -7,7 +7,7 @@
 %% their SHA-256, and the host page in `demo/pan/' runs them.
 -module(wb_pan_demo).
 
--export([build/4, default_replies/0]).
+-export([build/4, default_replies/0, modules_js/3]).
 
 -define(ORIGINAL, "trials/pan/claude-sonnet-5-5-1/reply.txt").
 -define(REVERSED, "trials/reverse/claude-sonnet-5-5-1/reply.txt").
@@ -20,21 +20,31 @@ default_replies() ->
 -spec build(file:filename(), file:filename(), file:filename(), file:filename()) ->
           {ok, file:filename()} | {error, term()}.
 build(Root, OriginalReply, ReversedReply, OutDir) ->
+    case modules_js(Root, OriginalReply, ReversedReply) of
+        {ok, Js} ->
+            ok = filelib:ensure_path(OutDir),
+            [{ok, _} = file:copy(filename:join([Root, "demo", "pan", F]), filename:join(OutDir, F))
+             || F <- ["index.html", "app.js"]],
+            ok = file:write_file(filename:join(OutDir, "modules.js"), Js),
+            {ok, filename:join(OutDir, "index.html")};
+        {error, _} = E ->
+            E
+    end.
+
+%% The modules.js a page receives: both replies checked again, then their
+%% exact bytes, hashes and authors. The demo page and the UI check use it.
+-spec modules_js(file:filename(), file:filename(), file:filename()) -> {ok, iodata()} | {error, term()}.
+modules_js(Root, OriginalReply, ReversedReply) ->
     {ok, OText} = file:read_file(OriginalReply),
     {ok, RText} = file:read_file(ReversedReply),
     case wb_check:check_revision(reverse, OText, RText) of
         {error, {base_not_accepted, Report}} ->
             {error, {original_refused, Report}};
         {ok, #{base := #{bytes := OBytes}, revised := #{verdict := pass, bytes := RBytes}}} ->
-            ok = filelib:ensure_path(OutDir),
-            [{ok, _} = file:copy(filename:join([Root, "demo", "pan", F]), filename:join(OutDir, F))
-             || F <- ["index.html", "app.js"]],
             Modules = #{original => entry("Original", Root, OriginalReply, OBytes),
                         reversed => entry("Reversed", Root, ReversedReply, RBytes)},
-            ok = file:write_file(filename:join(OutDir, "modules.js"),
-                                 ["// Written by bin/wasm-bytes pan-demo from the recorded replies.\n"
-                                  "window.PAN_MODULES = ", json:encode(Modules), ";\n"]),
-            {ok, filename:join(OutDir, "index.html")};
+            {ok, ["// Written by bin/wasm-bytes from the recorded replies.\n"
+                  "window.PAN_MODULES = ", json:encode(Modules), ";\n"]};
         {ok, #{revised := Revised}} ->
             {error, {reversed_refused, Revised}}
     end.

@@ -8,6 +8,8 @@
 %%   pan     screen_pan(x): DX-Ball's position-to-pan helper, as REA
 %%           recovered it from the game's x86 code
 %%   reverse screen_pan(x) changed: the same pan with its sign reversed
+%%   ui      the demo page itself, as one HTML file, checked in a browser
+%%           by wb_ui rather than as WebAssembly
 %%
 %% The references are written from the English specifications, in Erlang,
 %% without looking at any candidate. They are the only definition of a right
@@ -22,17 +24,17 @@
 -define(MIN_I32, -2147483648).
 -define(MAX_I32, 2147483647).
 
--type name() :: write | revise | digits | pan | reverse.
+-type name() :: write | revise | digits | pan | reverse | ui.
 -type task() :: #{name := name(),
-                  export := binary(),
-                  params := [atom()],
-                  results := [atom()],
+                  export => binary(),
+                  params => [atom()],
+                  results => [atom()],
                   prompt := file:filename(),
                   guided => file:filename(),
                   base => name()}.
 
 -spec names() -> [name()].
-names() -> [write, revise, digits, pan, reverse].
+names() -> [write, revise, digits, pan, reverse, ui].
 
 -spec get(name()) -> task().
 get(write) ->
@@ -47,6 +49,8 @@ get(pan) ->
 get(reverse) ->
     #{name => reverse, export => ~"screen_pan", params => [i32], results => [i32],
       prompt => "prompts/reverse.txt", base => pan};
+get(ui) ->
+    #{name => ui, prompt => "prompts/ui.txt"};
 get(digits) ->
     #{name => digits, export => ~"digit_sum", params => [i32], results => [i32],
       prompt => "prompts/digits.txt", guided => "prompts/digits.guided.txt"}.

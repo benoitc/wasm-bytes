@@ -22,7 +22,7 @@ SYSTEM="You are a helpful assistant."
 if [ -e "$DIR" ]; then echo "$DIR exists" >&2; exit 2; fi
 mkdir -p "$DIR"
 case $TASK in
-    write|digits|pan)
+    write|digits|pan|ui)
         case ${PROMPT:-baseline} in
             baseline) "$ROOT/bin/wasm-bytes" prompt "$TASK" > "$DIR/prompt.txt" ;;
             guided) "$ROOT/bin/wasm-bytes" prompt "$TASK" --guided > "$DIR/prompt.txt" ;;
@@ -31,7 +31,7 @@ case $TASK in
     revise|reverse)
         [ -n "$BASE" ] || { echo "$TASK needs a base, such as write/LABEL or pan/LABEL" >&2; exit 2; }
         "$ROOT/bin/wasm-bytes" prompt "$TASK" --base "$ROOT/trials/$BASE/reply.txt" > "$DIR/prompt.txt" ;;
-    *) echo "task is write, digits, pan, revise or reverse" >&2; exit 2 ;;
+    *) echo "task is write, digits, pan, ui, revise or reverse" >&2; exit 2 ;;
 esac
 
 EMPTY=$(mktemp -d)
