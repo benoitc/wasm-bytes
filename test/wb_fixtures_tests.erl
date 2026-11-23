@@ -184,9 +184,10 @@ trial_prompts() ->
     Trials = [F || #{kind := trials} = F <- wb_fixture:all(root())],
     ?assert(length([T || #{task := digits} = T <- Trials]) >= 3),
     [case F of
-         #{task := Task, prompt := Prompt} when Task =:= revise; Task =:= reverse ->
+         #{task := Task, prompt := Prompt, config := C} when Task =:= revise; Task =:= reverse ->
              {ok, _, Base} = wb_fixture:base_reply(root(), F),
-             {ok, Rendered} = wasm_bytes:render_prompt(root(), Task, Base),
+             {ok, Rendered} = wasm_bytes:render_prompt(root(), Task, Base,
+                                                       maps:get(prompt_variant, C, baseline)),
              ?assertEqual({Label, iolist_to_binary(Rendered)}, {Label, Prompt});
          #{task := Task, prompt := Prompt, config := C} ->
              %% A one-prompt task: the prompt file for its variant, as it is.
@@ -210,7 +211,19 @@ guided_prompts() ->
     [Card, Card] = Cards,
     %% No constant the tasks need appears encoded in the card.
     [?assertEqual({Bytes, nomatch}, {Bytes, binary:match(Card, Bytes)})
-     || Bytes <- [~"ad 03", ~"f4 03", ~"e4 00", ~"98 03", ~"f5 03", ~"41 0a"]].
+     || Bytes <- [~"ad 03", ~"f4 03", ~"e4 00", ~"98 03", ~"f5 03", ~"41 0a"]],
+    %% The pan tasks share a card with the floating-point instructions, and it
+    %% does not hold the encodings of 1.5625, 500.0 or 1.0.
+    PanCards = [begin
+                    {ok, P} = wb_task:prompt(T, guided),
+                    {ok, Bin} = file:read_file(filename:join(root(), P)),
+                    [_, AfterTask] = binary:split(Bin, ~"Work through these steps"),
+                    hd(binary:split(AfterTask, ~"Reply with only the bytes"))
+                end || T <- [pan, reverse]],
+    [PanCard, PanCard] = PanCards,
+    ?assertNotEqual(nomatch, binary:match(PanCard, ~"b7    f64.convert_i32_s")),
+    [?assertEqual({Bytes, nomatch}, {Bytes, binary:match(PanCard, Bytes)})
+     || Bytes <- [~"f9 3f", ~"40 7f 40", ~"00 00 f0 3f"]].
 
 grouped_output() ->
     Wrong = [{X, wb_task:expected(write, X), 1 - wb_task:expected(write, X)}
