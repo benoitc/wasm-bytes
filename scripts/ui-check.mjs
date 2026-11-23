@@ -104,8 +104,11 @@ const INSTRUMENT = `(() => {
   const ASN = window.AudioScheduledSourceNode && AudioScheduledSourceNode.prototype;
   if (ASN) {
     const start = ASN.start, stop = ASN.stop;
+    // A beep is measured as the page scheduled it: start(0) means time 0 on
+    // the page's clock even if the audio clock has moved on, so the length
+    // is stop minus start as the page wrote them.
     ASN.start = function (when) {
-      const at = when ? when : this.context.currentTime;
+      const at = when === undefined ? this.context.currentTime : when;
       const seen = new Set(), queue = [this];
       let panner = null, reaches = false, loud = 1;
       while (queue.length) {
@@ -126,7 +129,7 @@ const INSTRUMENT = `(() => {
       return start.apply(this, arguments);
     };
     ASN.stop = function (when) {
-      if (this.__beep) this.__beep.stop = when ? when : this.context.currentTime;
+      if (this.__beep) this.__beep.stop = when === undefined ? this.context.currentTime : when;
       return stop.apply(this, arguments);
     };
   }
