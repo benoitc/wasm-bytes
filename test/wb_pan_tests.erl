@@ -50,6 +50,7 @@ pan_test_() ->
       {"a reversal reports its 640 changes in a few lines", fun reversal_report/0},
       {"the CLI checks and prompts the pan tasks", fun cli/0},
       {"the demo page carries the recorded bytes", fun demo_page/0},
+      {"the generated page is the source, with its iOS sound handling", fun demo_page_is_the_source/0},
       {"the demo refuses replies that do not pass", fun demo_refuses/0}]}.
 
 off_by_one() ->
@@ -108,6 +109,21 @@ demo_page() ->
          ?assertEqual(wb_trace:sha256(Bytes), maps:get(<<"sha256">>, M)),
          ?assertEqual(~"claude-sonnet-5-5", maps:get(<<"model">>, M))
      end || M <- [O, R]].
+
+%% The page is generated from demo/pan/: what pan-demo writes is the source
+%% as it is, including the sound handling Safari on iOS needs.
+demo_page_is_the_source() ->
+    Out = wb_test_io:scratch("pan-demo-source"),
+    {ok, _} = wb_pan_demo:build(wb_test_io:root(), path(?PAN), path(?REVERSED), Out),
+    [?assertEqual({F, text(filename:join("demo/pan", F))},
+                  {F, element(2, file:read_file(filename:join(Out, F)))})
+     || F <- ["index.html", "app.js"]],
+    {ok, App} = file:read_file(filename:join(Out, "app.js")),
+    [?assert(has(App, Part))
+     || Part <- [~"webkitAudioContext", ~"navigator.audioSession", ~"createStereoPanner",
+                 ~"keepAlive", ~"visibilitychange"]],
+    %% The tap handler does not wait before starting the audio.
+    ?assertNot(has(App, ~"onclick = async")).
 
 demo_refuses() ->
     Out = wb_test_io:scratch("pan-demo-refused"),
