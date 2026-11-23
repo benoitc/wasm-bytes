@@ -37,32 +37,47 @@ cp "$ROOT/site/style.css" "$OUT/style.css"
 "$ROOT/bin/wasm-bytes" pan-demo --no-open >/dev/null
 cp "$ROOT"/_build/pan-demo/* "$OUT/demo/pan/"
 
-# The demo pages the models wrote, for every ui trial that passed its checks:
-# each reply as it is, beside the same modules.js, and a page listing them.
-# The list shows each one in a sandboxed frame and links to it on its own,
-# since Safari on iOS may not play audio from a frame.
+# The demo pages the models wrote, for every ui trial: each reply as it is,
+# beside the same modules.js, and a page listing them. Pages that passed
+# every browser check come first; the others follow with their verdict. The
+# list shows each one in a sandboxed frame and links to it on its own, since
+# Safari on iOS may not play audio from a frame.
 GALLERY="$ROOT/_build/site-src/ui.md"
 mkdir -p "$(dirname "$GALLERY")" "$OUT/demo/ui"
 cat > "$GALLERY" <<'INTRO'
 # Pages the models wrote
 
-Each page below is a model's whole reply to the [ui prompt](https://github.com/benoitc/wasm-bytes/blob/main/prompts/ui.txt), published as it came back. Every one passed the browser checks: it uses the recorded `screen_pan` modules for every value it shows or plays, its sound turns on with one tap, and it fits a phone screen. Open a page on its own to hear it on an iPhone. [How the pages are checked](../../doc/ui.html)
+Each page below is a model's whole reply to the [ui prompt](https://github.com/benoitc/wasm-bytes/blob/main/prompts/ui.txt), published as it came back. The pages in the first section passed every browser check: each uses the recorded `screen_pan` modules for every value it shows or plays, turns its sound on with one tap, asks for media playback so that an iPhone's silent switch should not mute it, and fits a phone screen. The pages in the second section failed at least one check, and their verdict says which. Open a page on its own to hear it on an iPhone. [How the pages are checked](../../doc/ui.html)
 
 INTRO
-for dir in "$ROOT"/trials/ui/*/; do
+
+# One entry: the page, its links, and a sandboxed preview.
+gallery_entry() {
+    dir=$1 note=$2
     label=$(basename "$dir")
-    grep -q '^{expect, pass}' "$dir/fixture.config" || continue
-    model=$(sed -n 's/^{model, "\([^"]*\)"}\./\1/p' "$dir/fixture.config")
+    model=$(sed -n 's/^{model, "\([^"]*\)"}\./\1/p' "$dir/fixture.config" | sed 's/, digest .*//')
     mkdir -p "$OUT/demo/ui/$label"
     cp "$dir/reply.txt" "$OUT/demo/ui/$label/index.html"
     cp "$ROOT/_build/pan-demo/modules.js" "$OUT/demo/ui/$label/modules.js"
     cat >> "$GALLERY" <<PAGE
-## $model
+### $model
 
-<p><a href="$label/index.html">Open the page</a> · <a href="$REPO_URL/blob/main/trials/ui/$label/reply.txt">Its reply on GitHub</a> · <a href="$REPO_URL/blob/main/trials/ui/$label/fixture.config">Model, settings and verdict</a></p>
+$note<p><a href="$label/index.html">Open the page</a> · <a href="$REPO_URL/blob/main/trials/ui/$label/reply.txt">Its reply on GitHub</a> · <a href="$REPO_URL/blob/main/trials/ui/$label/fixture.config">Model, settings and verdict</a></p>
 <iframe src="$label/index.html" title="Demo page written by $model" sandbox="allow-scripts" allow="autoplay" loading="lazy" style="width:100%;height:720px;border:1px solid var(--line);border-radius:8px"></iframe>
 
 PAGE
+}
+
+printf '## Passed every check\n\n' >> "$GALLERY"
+for dir in "$ROOT"/trials/ui/*/; do
+    grep -q '^{expect, pass}' "$dir/fixture.config" && gallery_entry "$dir" ""
+done
+printf '## Did not pass every check\n\n' >> "$GALLERY"
+for dir in "$ROOT"/trials/ui/*/; do
+    grep -q '^{expect, pass}' "$dir/fixture.config" && continue
+    verdict=$(sed -n 's/^{expect, \([a-z_]*\)}.*/\1/p' "$dir/fixture.config")
+    gallery_entry "$dir" "<p>Verdict: <code>$verdict</code>. <a href=\"../../doc/ui.html#what-the-models-wrote\">Which check failed, and what it means</a></p>
+"
 done
 pandoc --from gfm --to html5 --standalone \
     --template "$ROOT/site/template.html" \
