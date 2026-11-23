@@ -1,0 +1,13 @@
+{
+  "created_at": "2026-11-23T22:45:06.116767Z",
+  "digest": "d183b1321cb57f018c738d2a826d70f575656fbcb7cec67f333d15b0f6a3d178",
+  "done_reason": "stop",
+  "eval_count": 12794,
+  "model": "inkling-2-mini:26b-a5b-nvfp4",
+  "ollama_version": "0.40.17",
+  "prompt_eval_count": 2326,
+  "result": "00 61 73 6d 01 00 00 00 01 05 60 01 7f 01 7f 03 02 01 00 07 0e 01 0a 73 63 72 65 65 6e 5f 70 61 6e 00 00 0a 26 01 24 00 20 00 b7 44 00 00 00 00 00 00 f9 3f a2 44 00 00 00 00 00 40 7f 40 a1 44 00 00 00 00 00 00 3f a2 aa 0b",
+  "think": "default",
+  "total_duration_ns": 414058349208
+}
+

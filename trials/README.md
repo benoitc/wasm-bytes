@@ -38,14 +38,16 @@ Run `bin/wasm-bytes demo` to confirm the new trial replays as labelled. The demo
 
 ## Use the guided prompt
 
-Both one-prompt tasks also have a guided prompt. It adds a reference card to the same task: the module layout, how numbers are encoded, and the byte of each instruction with the order of its operands. It also asks the model to work in numbered steps. Use it to test whether a model can encode a program when it does not have to recall the opcode table. Keep the baseline prompt for results you want to compare with earlier trials. [Guided write prompt](../prompts/write.guided.txt) · [Guided digit_sum prompt](../prompts/digits.guided.txt)
+The `write`, `digits`, `pan` and `reverse` tasks also have a guided prompt. It adds a reference card to the same task: the module layout, how numbers are encoded, and the byte of each instruction with the order of its operands. It also asks the model to work in numbered steps. Use it to test whether a model can encode a program when it does not have to recall the opcode table. Keep the baseline prompt for results you want to compare with earlier trials. The card for `pan` and `reverse` adds the floating-point instructions and how a double is encoded. [Guided write prompt](../prompts/write.guided.txt) · [Guided digit_sum prompt](../prompts/digits.guided.txt) · [Guided pan prompt](../prompts/pan.guided.txt)
 
 ```sh
 bin/wasm-bytes prompt write --guided
 bin/wasm-bytes prompt digits --guided
+bin/wasm-bytes prompt pan --guided
+bin/wasm-bytes prompt reverse --base trials/pan/<label>/reply.txt --guided
 ```
 
-Record which prompt a trial received. Add `{prompt_variant, guided}.` to its `fixture.config`. Both recorders do this when you set `PROMPT=guided`, for example `PROMPT=guided scripts/record-ollama-trial.sh write my-label MODEL`. The revision task has only the baseline prompt.
+Record which prompt a trial received. Add `{prompt_variant, guided}.` to its `fixture.config`. Both recorders do this when you set `PROMPT=guided`, for example `PROMPT=guided scripts/record-ollama-trial.sh write my-label MODEL`. For `reverse`, add `--guided` to `bin/wasm-bytes prompt reverse --base`. The recorders do this too. The `revise` task has only the baseline prompt.
 
 ## Record with the Claude Code CLI
 

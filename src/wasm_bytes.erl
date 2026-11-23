@@ -12,7 +12,7 @@
 %% REPLY is a file, or `-' for standard input.
 -module(wasm_bytes).
 
--export([main/1, run/2, demo/1, render_revise_prompt/2, render_prompt/3]).
+-export([main/1, run/2, demo/1, render_revise_prompt/2, render_prompt/3, render_prompt/4]).
 
 -define(PLACEHOLDER, <<"{{MODULE_HEX}}">>).
 
@@ -88,15 +88,11 @@ command(["prompt", Task, "--guided"]) when ?ONE_PROMPT(Task) ->
             throw({usage, ["wasm-bytes: the ", Task, " task has no guided prompt"]})
     end;
 command(["prompt", Task, "--base", Base]) when ?REVISION(Task) ->
-    case render_prompt(root(), task(Task), input(Base)) of
-        {ok, Prompt} ->
-            io:put_chars(Prompt),
-            0;
-        {error, Report} ->
-            {ok, BaseTask} = wb_task:base(task(Task)),
-            err(wb_report:base_refused(list_to_binary(Base), Report, BaseTask)),
-            1
-    end;
+    revision_prompt(Task, Base, baseline);
+command(["prompt", Task, "--base", Base, "--guided"]) when ?REVISION(Task) ->
+    revision_prompt(Task, Base, guided);
+command(["prompt", Task, "--guided", "--base", Base]) when ?REVISION(Task) ->
+    revision_prompt(Task, Base, guided);
 command(["pan-demo" | Opts]) ->
     pan_demo(Opts);
 command(["help"]) ->
@@ -104,6 +100,17 @@ command(["help"]) ->
     0;
 command(_) ->
     throw({usage, "wasm-bytes: unknown command"}).
+
+revision_prompt(Task, Base, Variant) ->
+    case render_prompt(root(), task(Task), input(Base), Variant) of
+        {ok, Prompt} ->
+            io:put_chars(Prompt),
+            0;
+        {error, Report} ->
+            {ok, BaseTask} = wb_task:base(task(Task)),
+            err(wb_report:base_refused(list_to_binary(Base), Report, BaseTask)),
+            1
+    end.
 
 usage() ->
     "usage: bin/wasm-bytes replay\n"
@@ -114,7 +121,7 @@ usage() ->
     "       bin/wasm-bytes check ui PAGE [--original REPLY --reversed REPLY]\n"
     "       bin/wasm-bytes check revise|reverse REPLY --base REPLY\n"
     "       bin/wasm-bytes prompt write|digits|pan|ui [--guided]\n"
-    "       bin/wasm-bytes prompt revise|reverse --base REPLY\n"
+    "       bin/wasm-bytes prompt revise|reverse --base REPLY [--guided]\n"
     "       bin/wasm-bytes pan-demo [--original REPLY --reversed REPLY] [--no-open]\n"
     "TASK is write, revise, digits, pan or reverse.\n"
     "REPLY is a file holding a model's reply, or - for standard input.\n".
@@ -255,10 +262,16 @@ render_revise_prompt(Root, BaseText) ->
 -spec render_prompt(file:filename(), wb_task:name(), binary()) ->
           {ok, iodata()} | {error, wb_check:report()}.
 render_prompt(Root, Task, BaseText) ->
+    render_prompt(Root, Task, BaseText, baseline).
+
+-spec render_prompt(file:filename(), wb_task:name(), binary(), baseline | guided) ->
+          {ok, iodata()} | {error, wb_check:report()}.
+render_prompt(Root, Task, BaseText, Variant) ->
     {ok, BaseTask} = wb_task:base(Task),
     case wb_check:check(BaseTask, BaseText) of
         #{verdict := pass, bytes := Bytes} ->
-            Template = prompt_file(Root, Task),
+            {ok, Path} = wb_task:prompt(Task, Variant),
+            {ok, Template} = file:read_file(filename:join(Root, Path)),
             Hex = string:trim(iolist_to_binary(wb_hex:encode(Bytes)), trailing),
             {ok, binary:replace(Template, ?PLACEHOLDER, Hex)};
         Report ->

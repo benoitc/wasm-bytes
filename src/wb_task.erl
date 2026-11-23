@@ -45,10 +45,10 @@ get(revise) ->
       prompt => "prompts/revise.txt", base => write};
 get(pan) ->
     #{name => pan, export => ~"screen_pan", params => [i32], results => [i32],
-      prompt => "prompts/pan.txt"};
+      prompt => "prompts/pan.txt", guided => "prompts/pan.guided.txt"};
 get(reverse) ->
     #{name => reverse, export => ~"screen_pan", params => [i32], results => [i32],
-      prompt => "prompts/reverse.txt", base => pan};
+      prompt => "prompts/reverse.txt", guided => "prompts/reverse.guided.txt", base => pan};
 get(ui) ->
     #{name => ui, prompt => "prompts/ui.txt"};
 get(digits) ->
@@ -57,8 +57,8 @@ get(digits) ->
 
 %% The prompt file for a task. `baseline' states the task and the reply
 %% format. `guided' adds a reference card (module layout, LEB128, the byte of
-%% each instruction with its operands) and numbered steps; only the tasks
-%% with one prompt have it.
+%% each instruction with its operands) and numbered steps. The pan tasks'
+%% card adds the floating-point instructions and how a double is encoded.
 -spec prompt(name(), baseline | guided) -> {ok, file:filename()} | {error, no_guided_prompt}.
 prompt(Task, baseline) ->
     #{prompt := P} = wb_task:get(Task),

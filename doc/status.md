@@ -43,6 +43,8 @@ With the baseline prompts, the local model laid out every section and length cor
 
 Opus and Sonnet sent the same bytes with both prompts. Haiku's guided `retry` passed where its baseline attempt had not. With one attempt per cell, these results cannot separate the effect of the prompt from the variation between attempts. Each local trial keeps the model's thinking trace in `thinking.txt`.
 
+The local model also received the guided `pan` prompt once. Its card adds the floating-point instructions and how a double is encoded, with examples other than the task's constants. Its 74-byte module is malformed. The type section has no entry count, so the decoder reads `60` as 96 types, and the constant 1.0 is one byte short. It encoded 1.5625 and 500.0 correctly, and its instructions match the other models'. With no accepted `pan` module, it could not be given the `reverse` prompt, so no demo runs on local-model output alone yet. [Guided pan prompt](../prompts/pan.guided.txt) · [Its reply](../trials/pan/inkling-2-mini-guided-1/reply.txt)
+
 ## A function recovered from DX-Ball
 
 On 23 November 2026, the three Claude models each received one prompt describing `screen_pan`. REA recovered this position-to-pan helper from DX-Ball's x86 code. Each model then received its own accepted bytes and a request to reverse the stereo. Each cell is one attempt, checked on every position from 0 through 640. [What REA recovered and which cases can be checked](dx-ball.md)
@@ -64,8 +66,9 @@ On 23 November 2026, the three Claude models each received one prompt asking for
 | Claude Sonnet 5.5 | 8,138 bytes | all 13 checks pass |
 | Claude Opus 5.5 | 15,242 bytes | all 13 checks pass |
 | Claude Haiku 5.5 | 7,456 bytes | all 13 checks pass |
+| Inkling 2 Mini, local | 9,403 bytes | 12 of 13: no media playback requested for iOS |
 
-Every page called `screen_pan` on the selected module for each value it showed or played. Each kept its beeps identical across modes, turned the sound on with one tap, and fit a phone screen. Haiku's page asks for media playback only through the audio-session API of recent Safari. The check simulates that API, so it does not cover older iOS. No one has listened to these pages on an iPhone yet. [Trials](../trials/ui/)
+Every page called `screen_pan` on the selected module for each value it showed or played. Each kept its beeps identical across modes, turned the sound on with one tap, and fit a phone screen. Haiku's page asks for media playback only through the audio-session API of recent Safari. The check simulates that API, so it does not cover older iOS. The local model's page does everything else the prompt asks, but would probably be muted by an iPhone's silent switch. On the same day, the maintainer reported that the sound plays on an iPhone. Which pages they tried, and the iOS version, were not recorded. [Trials](../trials/ui/)
 
 ## Cross-engine and platform runs
 

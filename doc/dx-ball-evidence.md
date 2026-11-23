@@ -44,6 +44,8 @@ Three models each received each prompt once, through the Claude Code CLI with to
 
 All three `pan` replies decode to the same 76 bytes, SHA-256 `11aa6fd76525b13b2cd0998ac5f65154ecebfd1377091df117cd7dcd8f4058ea`. They convert x to a double, multiply, subtract, multiply, and truncate. They write the three constants as `00 00 00 00 00 00 f9 3f`, `00 00 00 00 00 40 7f 40` and `00 00 00 00 00 00 f0 3f`, the same bytes REA read from the game's data. Sonnet and Opus reversed the stereo by changing the scale from 1.0 to −1.0, one byte from `3f` to `bf`. Haiku negated 1.5625 and 500.0 instead, which computes 500 − 1.5625 × x.
 
+A local model, Inkling 2 Mini, received the guided `pan` prompt once. That prompt adds the floating-point instructions and the encoding of a double. Its module is malformed: the type section has no entry count, and the constant 1.0 is one byte short. [Results](status.md#a-guided-prompt-for-smaller-models)
+
 The constructed example `examples/pan/accepted` has the same 76 bytes as the three `pan` replies. Opus 5.5 assembled it while building the checker. All three trials ran with no tools and no files, so they did not copy it. Another constructed example shows the checker catching a near miss. [Integer-division example](../examples/pan/integer-division/)
 
 Run this to replay both checks of the Sonnet pair. It checks the `pan` reply again as the base, then the revision:

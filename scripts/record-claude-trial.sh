@@ -30,7 +30,11 @@ case $TASK in
         esac ;;
     revise|reverse)
         [ -n "$BASE" ] || { echo "$TASK needs a base, such as write/LABEL or pan/LABEL" >&2; exit 2; }
-        "$ROOT/bin/wasm-bytes" prompt "$TASK" --base "$ROOT/trials/$BASE/reply.txt" > "$DIR/prompt.txt" ;;
+        case ${PROMPT:-baseline} in
+            baseline) "$ROOT/bin/wasm-bytes" prompt "$TASK" --base "$ROOT/trials/$BASE/reply.txt" > "$DIR/prompt.txt" ;;
+            guided) "$ROOT/bin/wasm-bytes" prompt "$TASK" --base "$ROOT/trials/$BASE/reply.txt" --guided > "$DIR/prompt.txt" ;;
+            *) echo "PROMPT is baseline or guided" >&2; exit 2 ;;
+        esac ;;
     *) echo "task is write, digits, pan, ui, revise or reverse" >&2; exit 2 ;;
 esac
 
