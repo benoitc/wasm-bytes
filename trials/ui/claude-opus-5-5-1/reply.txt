@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DX-Ball (1996) – stereo pan of the ball sound</title>
+<style>
+  :root {
+    --bg: #10131a;
+    --panel: #1a1f2b;
+    --fg: #e8ecf4;
+    --muted: #9aa4b8;
+    --accent: #ffcc33;
+    --accent2: #4fc3f7;
+    --ball: 28px;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    overflow-x: hidden;
+  }
+  main {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 16px;
+  }
+  h1 { font-size: 1.35rem; margin: 0.2em 0 0.3em; }
+  p { margin: 0.4em 0 0.8em; color: var(--muted); }
+  .panel {
+    background: var(--panel);
+    border-radius: 12px;
+    padding: 14px;
+    margin: 14px 0;
+  }
+  .track-wrap { position: relative; padding-top: 4px; }
+  .track {
+    position: relative;
+    height: calc(var(--ball) + 16px);
+    border-radius: 999px;
+    background: linear-gradient(90deg, #233 0%, #222838 50%, #233 100%);
+    border: 1px solid #2d3547;
+    overflow: hidden;
+  }
+  .track .lr {
+    position: absolute; top: 50%; transform: translateY(-50%);
+    font-size: 0.75rem; font-weight: 700; color: #5d6780; pointer-events: none;
+  }
+  .track .l { left: 10px; }
+  .track .r { right: 10px; }
+  .ball {
+    --x: 0;
+    position: absolute;
+    top: 8px;
+    left: calc((100% - var(--ball) - 16px) * var(--x) / 640 + 8px);
+    width: var(--ball);
+    height: var(--ball);
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #fff 0%, #dfe7f5 25%, #8a95ab 100%);
+    box-shadow: 0 0 10px rgba(255,255,255,0.35);
+  }
+  .reading-row {
+    position: relative;
+    height: 2.6em;
+    margin-top: 6px;
+  }
+  #reading {
+    --x: 0;
+    position: absolute;
+    top: 0;
+    left: calc((100% - var(--ball) - 16px) * var(--x) / 640 + 8px + var(--ball) / 2);
+    transform: translateX(calc(-1 * var(--x) / 640 * 100%));
+    white-space: nowrap;
+    font: 600 0.95rem/1.3 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    background: #0c0f15;
+    border: 1px solid #2d3547;
+    border-radius: 8px;
+    padding: 4px 8px;
+    color: var(--fg);
+  }
+  #reading .v { color: var(--accent); }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 12px;
+  }
+  .controls .group {
+    display: flex;
+    gap: 0;
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid #3a4459;
+  }
+  button {
+    font: inherit;
+    font-weight: 600;
+    color: var(--fg);
+    background: #252c3c;
+    border: 1px solid #3a4459;
+    border-radius: 10px;
+    padding: 10px 16px;
+    min-height: 44px;
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .group button { border: 0; border-radius: 0; }
+  .group button + button { border-left: 1px solid #3a4459; }
+  button:hover:not(:disabled) { background: #2e3649; }
+  button:focus-visible { outline: 3px solid var(--accent2); outline-offset: 2px; }
+  button[aria-pressed="true"] { background: var(--accent); color: #1a1400; }
+  #sound[aria-pressed="true"] { background: #43c46b; color: #062010; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .status { font-size: 0.9rem; color: var(--muted); margin-top: 10px; min-height: 1.4em; }
+  .status.err { color: #ff7b7b; }
+  dl.meta { margin: 0; font-size: 0.85rem; display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; }
+  dl.meta dt { color: var(--muted); }
+  dl.meta dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, Menlo, Consolas, monospace; }
+  @media (max-width: 420px) {
+    :root { --ball: 22px; }
+    main { padding: 10px; }
+    button { padding: 10px 12px; }
+    #reading { font-size: 0.82rem; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>DX-Ball (1996): where the ball's beep is heard</h1>
+  <p>The ball crosses the screen from left to right. Every 200&nbsp;ms a short beep is played, and its stereo position comes from the selected WebAssembly module's <code>screen_pan(x)</code>. <strong>Original</strong> puts the sound on the ball's side; <strong>Reversed</strong> puts it on the opposite side. Headphones help.</p>
+
+  <section class="panel" aria-label="Demonstration">
+    <div class="track-wrap">
+      <div class="track" aria-hidden="true">
+        <span class="lr l">L</span><span class="lr r">R</span>
+        <div class="ball" id="ball"></div>
+      </div>
+      <div class="reading-row">
+        <div id="reading" role="status" aria-live="off">x = –, screen_pan(x) = –</div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button id="sound" type="button" aria-pressed="false" disabled>Sound: off</button>
+      <div class="group" role="group" aria-label="Module">
+        <button id="mode-original" type="button" aria-pressed="true" disabled>Original</button>
+        <button id="mode-reversed" type="button" aria-pressed="false" disabled>Reversed</button>
+      </div>
+      <button id="pause" type="button" aria-pressed="false" disabled>Pause</button>
+    </div>
+    <div class="status" id="status">Loading modules…</div>
+  </section>
+
+  <section class="panel" aria-label="Selected module">
+    <dl class="meta">
+      <dt>Module</dt><dd id="meta-label">–</dd>
+      <dt>SHA-256</dt><dd id="meta-sha">–</dd>
+    </dl>
+  </section>
+</main>
+
+<script src="modules.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  var X_MAX = 640;
+  var SPEED = 160;          // x units per second
+  var BEEP_INTERVAL = 200;  // ms
+  var BEEP_FREQ = 880;      // Hz
+  var BEEP_LEN = 0.06;      // s
+  var BEEP_GAIN = 0.3;
+
+  var el = {
+    sound: document.getElementById("sound"),
+    orig: document.getElementById("mode-original"),
+    rev: document.getElementById("mode-reversed"),
+    pause: document.getElementById("pause"),
+    reading: document.getElementById("reading"),
+    ball: document.getElementById("ball"),
+    status: document.getElementById("status"),
+    metaLabel: document.getElementById("meta-label"),
+    metaSha: document.getElementById("meta-sha")
+  };
+
+  var fns = { original: null, reversed: null };
+  var info = { original: null, reversed: null };
+  var mode = "original";
+  var x = 0;
+  var pos = 0;              // floating position
+  var paused = false;
+  var lastT = null;
+  var shownX = null, shownMode = null;
+
+  var soundOn = false;
+  var ctx = null;
+  var beepTimer = null;
+  var silentAudio = null;
+
+  function setStatus(msg, isErr) {
+    el.status.textContent = msg;
+    el.status.className = "status" + (isErr ? " err" : "");
+  }
+
+  function base64ToBytes(b64) {
+    var clean = String(b64).replace(/[^A-Za-z0-9+/=_-]/g, "").replace(/-/g, "+").replace(/_/g, "/");
+    while (clean.length % 4) clean += "=";
+    var bin = atob(clean);
+    var out = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+
+  // Provide harmless stubs for any imports a module might declare.
+  function buildImports(module) {
+    var imports = {};
+    var list = WebAssembly.Module.imports(module);
+    for (var i = 0; i < list.length; i++) {
+      var imp = list[i];
+      if (!imports[imp.module]) imports[imp.module] = {};
+      var v;
+      switch (imp.kind) {
+        case "function": v = function () { return 0; }; break;
+        case "memory": v = new WebAssembly.Memory({ initial: 1, maximum: 65536 }); break;
+        case "table": v = new WebAssembly.Table({ initial: 0, element: "anyfunc" }); break;
+        case "global":
+          try { v = new WebAssembly.Global({ value: "i32", mutable: false }, 0); } catch (e) { v = 0; }
+          break;
+        default: v = undefined;
+      }
+      imports[imp.module][imp.name] = v;
+    }
+    return imports;
+  }
+
+  function loadModule(key) {
+    var m = window.PAN_MODULES[key];
+    if (!m || typeof m.bytes !== "string") return Promise.reject(new Error("module '" + key + "' missing"));
+    var bytes = base64ToBytes(m.bytes);
+    return WebAssembly.compile(bytes).then(function (module) {
+      return WebAssembly.instantiate(module, buildImports(module));
+    }).then(function (instance) {
+      var f = instance.exports.screen_pan;
+      if (typeof f !== "function") throw new Error("module '" + key + "' does not export screen_pan");
+      fns[key] = f;
+      info[key] = m;
+    });
+  }
+
+  function pan(at) {
+    var f = fns[mode];
+    var v = f(at);
+    return Number(v);
+  }
+
+  function updateMeta() {
+    var m = info[mode];
+    el.metaLabel.textContent = m && m.label ? String(m.label) : mode;
+    el.metaSha.textContent = m && m.sha256 ? String(m.sha256) : "–";
+  }
+
+  function render(force) {
+    el.ball.style.setProperty("--x", x);
+    el.reading.style.setProperty("--x", x);
+    if (!fns[mode]) return;
+    if (force || x !== shownX || mode !== shownMode) {
+      var v;
+      try { v = pan(x); } catch (e) { v = NaN; }
+      shownX = x; shownMode = mode;
+      el.reading.textContent = "";
+      el.reading.appendChild(document.createTextNode("x = " + x + ", screen_pan(x) = "));
+      var s = document.createElement("span");
+      s.className = "v";
+      s.textContent = String(v);
+      el.reading.appendChild(s);
+    }
+  }
+
+  function frame(t) {
+    if (lastT === null) lastT = t;
+    var dt = Math.min(0.1, (t - lastT) / 1000);
+    lastT = t;
+    if (!paused) {
+      pos += SPEED * dt;
+      if (pos > X_MAX) pos = pos % (X_MAX + 1);
+      x = Math.max(0, Math.min(X_MAX, Math.round(pos)));
+    }
+    render(false);
+    requestAnimationFrame(frame);
+  }
+
+  // ---------- Audio ----------
+
+  function makeSilentWavUrl() {
+    var rate = 8000, n = 4000; // 0.5 s mono 16-bit
+    var buf = new ArrayBuffer(44 + n * 2);
+    var d = new DataView(buf);
+    function str(o, s) { for (var i = 0; i < s.length; i++) d.setUint8(o + i, s.charCodeAt(i)); }
+    str(0, "RIFF"); d.setUint32(4, 36 + n * 2, true); str(8, "WAVE");
+    str(12, "fmt "); d.setUint32(16, 16, true); d.setUint16(20, 1, true); d.setUint16(22, 1, true);
+    d.setUint32(24, rate, true); d.setUint32(28, rate * 2, true); d.setUint16(32, 2, true); d.setUint16(34, 16, true);
+    str(36, "data"); d.setUint32(40, n * 2, true);
+    return URL.createObjectURL(new Blob([buf], { type: "audio/wav" }));
+  }
+
+  function unlockAudio() {
+    // Ask iOS to treat this page's audio as media playback (ignores the silent switch).
+    try {
+      if (navigator.audioSession && "type" in navigator.audioSession) navigator.audioSession.type = "playback";
+    } catch (e) {}
+
+    if (!ctx) {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) { setStatus("Web Audio is not supported in this browser.", true); return false; }
+      ctx = new AC();
+    }
+
+    // Fallback for older iOS: a playing <audio> element moves the session to "playback".
+    if (!navigator.audioSession) {
+      try {
+        if (!silentAudio) {
+          silentAudio = document.createElement("audio");
+          silentAudio.setAttribute("playsinline", "");
+          silentAudio.setAttribute("x-webkit-airplay", "deny");
+          silentAudio.loop = true;
+          silentAudio.preload = "auto";
+          silentAudio.src = makeSilentWavUrl();
+        }
+        var p = silentAudio.play();
+        if (p && p.catch) p.catch(function () {});
+      } catch (e) {}
+    }
+
+    if (ctx.state !== "running") {
+      var r = ctx.resume();
+      if (r && r.catch) r.catch(function () {});
+    }
+    // Play one silent sample inside the gesture (needed by older Safari).
+    try {
+      var b = ctx.createBuffer(1, 1, ctx.sampleRate);
+      var s = ctx.createBufferSource();
+      s.buffer = b; s.connect(ctx.destination); s.start(0);
+    } catch (e) {}
+    return true;
+  }
+
+  function beep() {
+    if (!soundOn || !ctx || !fns[mode]) return;
+    if (ctx.state !== "running") { var r = ctx.resume(); if (r && r.catch) r.catch(function () {}); }
+    var v;
+    try { v = pan(x); } catch (e) { return; }
+    if (!isFinite(v)) return;
+    var t = ctx.currentTime + 0.01;
+    var osc = ctx.createOscillator();
+    var g = ctx.createGain();
+    var p = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+    osc.type = "square";
+    osc.frequency.setValueAtTime(BEEP_FREQ, t);
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(BEEP_GAIN, t + 0.004);
+    g.gain.setValueAtTime(BEEP_GAIN, t + BEEP_LEN - 0.01);
+    g.gain.linearRampToValueAtTime(0, t + BEEP_LEN);
+    osc.connect(g);
+    if (p) {
+      p.pan.setValueAtTime(v / 500, t);
+      g.connect(p); p.connect(ctx.destination);
+    } else {
+      g.connect(ctx.destination);
+    }
+    osc.start(t);
+    osc.stop(t + BEEP_LEN + 0.02);
+    osc.onended = function () {
+      try { osc.disconnect(); g.disconnect(); if (p) p.disconnect(); } catch (e) {}
+    };
+  }
+
+  function setSound(on) {
+    if (on) {
+      if (!unlockAudio()) return;
+      soundOn = true;
+      if (beepTimer) clearInterval(beepTimer);
+      beep();
+      beepTimer = setInterval(beep, BEEP_INTERVAL);
+    } else {
+      soundOn = false;
+      if (beepTimer) { clearInterval(beepTimer); beepTimer = null; }
+      if (silentAudio) { try { silentAudio.pause(); } catch (e) {} }
+    }
+    el.sound.setAttribute("aria-pressed", soundOn ? "true" : "false");
+    el.sound.textContent = soundOn ? "Sound: on" : "Sound: off";
+  }
+
+  function setMode(m) {
+    if (!fns[m]) return;
+    mode = m;
+    el.orig.setAttribute("aria-pressed", m === "original" ? "true" : "false");
+    el.rev.setAttribute("aria-pressed", m === "reversed" ? "true" : "false");
+    updateMeta();
+    render(true);
+  }
+
+  function setPaused(p) {
+    paused = p;
+    el.pause.setAttribute("aria-pressed", p ? "true" : "false");
+    el.pause.textContent = p ? "Resume" : "Pause";
+  }
+
+  el.sound.addEventListener("click", function () { setSound(!soundOn); });
+  el.orig.addEventListener("click", function () { setMode("original"); });
+  el.rev.addEventListener("click", function () { setMode("reversed"); });
+  el.pause.addEventListener("click", function () { setPaused(!paused); });
+
+  document.addEventListener("visibilitychange", function () {
+    if (!document.hidden && soundOn && ctx && ctx.state !== "running") {
+      var r = ctx.resume(); if (r && r.catch) r.catch(function () {});
+    }
+  });
+
+  // ---------- Start ----------
+  if (!window.PAN_MODULES) {
+    setStatus("modules.js was not found or did not define PAN_MODULES.", true);
+    return;
+  }
+  if (typeof WebAssembly !== "object") {
+    setStatus("This browser does not support WebAssembly.", true);
+    return;
+  }
+  ["original", "reversed"].forEach(function (k) {
+    var m = window.PAN_MODULES[k];
+    if (m && m.label) (k === "original" ? el.orig : el.rev).textContent = String(m.label);
+  });
+
+  Promise.all([loadModule("original"), loadModule("reversed")]).then(function () {
+    el.sound.disabled = false;
+    el.orig.disabled = false;
+    el.rev.disabled = false;
+    el.pause.disabled = false;
+    setMode("original");
+    setStatus("Ready. Turn the sound on and switch between the two modules.");
+    requestAnimationFrame(frame);
+  }).catch(function (e) {
+    setStatus("Could not load the WebAssembly modules: " + (e && e.message ? e.message : e), true);
+  });
+})();
+</script>
+</body>
+</html>

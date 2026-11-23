@@ -1,0 +1,323 @@
+```html
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DX-Ball Pan</title>
+<style>
+  :root {
+    --bg: #f7f6f2; --fg: #1d1d1b; --muted: #6b6a66; --panel: #ffffff;
+    --line: #d9d6ce; --ball: #c2410c; --accent: #1d4ed8; --ok: #15803d; --bad: #b91c1c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #161615; --fg: #ecebe6; --muted: #a3a19a; --panel: #20201e;
+            --line: #3a3935; --ball: #fb923c; --accent: #93b4ff; --ok: #4ade80; --bad: #f87171; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+         font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 1.4rem; margin: 0 0 4px; }
+  a { color: var(--accent); }
+  p { margin: 8px 0; }
+  .muted { color: var(--muted); font-size: 0.92rem; }
+  .controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 20px 0 12px; }
+  button { font: inherit; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line);
+           background: var(--panel); color: var(--fg); cursor: pointer; }
+  button[aria-pressed="true"] { border-color: var(--accent); outline: 2px solid var(--accent); }
+  .modes { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .modes button { border: 0; border-radius: 0; }
+  .modes button[aria-pressed="true"] { background: var(--accent); color: var(--bg); outline: none; }
+  .stage { position: relative; height: 150px; background: var(--panel); border: 1px solid var(--line);
+           border-radius: 10px; margin: 8px 0 4px; overflow: hidden; }
+  .edge { position: absolute; top: 8px; font-size: 0.8rem; color: var(--muted); }
+  .edge.left { left: 10px; } .edge.right { right: 10px; } .edge.center { left: 50%; transform: translateX(-50%); }
+  .ball { position: absolute; top: 62px; width: 22px; height: 22px; margin-left: -11px; border-radius: 50%;
+          background: var(--ball); }
+  .reading { position: absolute; top: 92px; transform: translateX(-50%); white-space: pre;
+             font: 0.9rem/1.3 ui-monospace, SFMono-Regular, Menlo, monospace; text-align: center; }
+  .meter { position: relative; height: 10px; border-radius: 5px; background: var(--line); margin: 14px 0 4px; }
+  .meter .mark { position: absolute; top: -4px; width: 4px; height: 18px; margin-left: -2px; background: var(--accent); }
+  .meter-labels { display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--muted); }
+  table { width: 100%; border-collapse: collapse; margin: 18px 0; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 6px 8px; border-top: 1px solid var(--line); vertical-align: top; }
+  td code { word-break: break-all; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.85rem; }
+  .ok { color: var(--ok); } .bad { color: var(--bad); }
+  h2 { font-size: 1.05rem; margin: 28px 0 6px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Claude wrote DX-Ball’s sound rule byte by byte</h1>
+  <p><strong>Does this demo use REA?</strong> Only its published findings. The REA team
+  used the tool to inspect the old game and work out how it turned a brick’s position into
+  a number for the sound system. We put that rule in a prompt. Claude wrote two small
+  programs, one for the original rule and one for reversed stereo.</p>
+  <p>Your browser runs those saved programs locally. You can use this demo without installing
+  REA or connecting to Claude.</p>
+  <p>Turn <strong>Sound</strong> on and watch the ball move from left to right.
+  In <strong>Original</strong>, the beep follows the ball. Switch to <strong>Reversed</strong>
+  and the beep moves the other way. With sound off, follow the marker below the ball.</p>
+  <p><a href="https://github.com/benoitc/wasm-bytes/blob/main/doc/dx-ball.md">Read the DX-Ball demo guide</a> for the prompts, replies, and test results.</p>
+
+  <div class="controls">
+    <button id="sound" aria-pressed="false">Sound: off</button>
+    <span class="modes" role="group" aria-label="Module">
+      <button id="mode-original" aria-pressed="true">Original</button>
+      <button id="mode-reversed" aria-pressed="false">Reversed</button>
+    </span>
+    <button id="pause">Pause</button>
+  </div>
+  <p class="muted">Tap <strong>Sound</strong> to start the audio. Use headphones to hear left and
+  right: a phone's speakers barely separate them. On an iPhone the page asks Safari for media
+  playback, so the silent switch should not mute it.</p>
+
+  <div class="stage" id="stage">
+    <span class="edge left">x = 0</span><span class="edge center">320</span><span class="edge right">640</span>
+    <div class="ball" id="ball"></div>
+    <div class="reading" id="reading" aria-live="off"></div>
+  </div>
+  <div class="meter" aria-hidden="true"><div class="mark" id="mark"></div></div>
+  <div class="meter-labels"><span>left</span><span>stereo position sent to the speakers</span><span>right</span></div>
+
+  <h2>What changes when you switch?</h2>
+  <p>The switch selects which WebAssembly program the browser calls for the next sound.
+  Try pressing <strong>Pause</strong> with the ball near one edge. Switch versions and watch
+  the number change sign. At the right edge, the original program returns <strong>500</strong>
+  (right speaker) and the revised one returns <strong>−500</strong> (left speaker).
+  The browser uses the same ball position and the same beep for both.</p>
+
+  <details>
+    <summary>Inspect the two files this page loaded</summary>
+    <p><a href="https://github.com/benoitc/wasm-bytes/blob/main/trials/pan/claude-sonnet-5-5-1/prompt.txt">Read the exact prompt for the default demo</a>.</p>
+    <p>Each row identifies the model and its saved reply. The fingerprint (SHA-256)
+    lets you check that the browser loaded the recorded bytes.</p>
+    <table>
+      <thead><tr><th>Version</th><th>Model and saved reply</th><th>File fingerprint (SHA-256)</th></tr></thead>
+      <tbody id="modules"></tbody>
+    </table>
+  </details>
+</main>
+<script src="modules.js"></script>
+<script>
+// The demo host. It runs the two modules that bin/wasm-bytes pan-demo put
+// in modules.js, and calls screen_pan(x) the same way whichever is selected.
+"use strict";
+
+const SWEEP_MS = 3200;      // left edge to right edge
+const PAUSE_MS = 600;       // at the right edge, before the ball starts again
+const BEEP_EVERY_MS = 200;  // one beep at the ball's position this often
+const BEEP_HZ = 660;
+const BEEP_GAIN = 0.18;
+const BEEP_MS = 90;
+const PAN_RANGE = 500;      // the recovered function's results run from -500 to 500
+
+const $ = (id) => document.getElementById(id);
+const clamp = (v) => Math.max(-1, Math.min(1, v));
+
+// Sound, written for Safari on iOS as well as for desktop browsers.
+// - The audio context is created and resumed inside the tap that turns sound
+//   on, before anything is awaited: Safari only starts audio from a gesture.
+// - iOS plays Web Audio on the ringer channel, which the silent switch mutes,
+//   unless the page asks for media playback: through navigator.audioSession
+//   where Safari has it, otherwise by playing a silent <audio> element.
+// - A context interrupted by a call or by leaving the page resumes on the
+//   next tap.
+const AudioCtx = window.AudioContext || window.webkitAudioContext;
+
+function silentWavUrl() {
+  const samples = 2000;                       // a quarter second at 8 kHz
+  const buf = new ArrayBuffer(44 + samples);
+  const v = new DataView(buf);
+  const text = (at, s) => { for (let i = 0; i < s.length; i++) v.setUint8(at + i, s.charCodeAt(i)); };
+  text(0, "RIFF"); v.setUint32(4, 36 + samples, true); text(8, "WAVE"); text(12, "fmt ");
+  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, 8000, true); v.setUint32(28, 8000, true);
+  v.setUint16(32, 1, true); v.setUint16(34, 8, true);
+  text(36, "data"); v.setUint32(40, samples, true);
+  for (let i = 0; i < samples; i++) v.setUint8(44 + i, 128);   // 8-bit silence
+  return URL.createObjectURL(new Blob([buf], { type: "audio/wav" }));
+}
+
+const sound = {
+  ctx: null,
+  on: false,
+  keepAlive: null,
+
+  // Called from the tap itself, so nothing here may wait.
+  set(on) {
+    if (on) {
+      this.mediaPlayback();
+      if (!this.ctx) this.ctx = new AudioCtx();
+      this.resume();
+    } else {
+      if (this.ctx) this.ctx.suspend();
+      if (this.keepAlive) this.keepAlive.pause();
+    }
+    this.on = on;
+  },
+
+  mediaPlayback() {
+    try {
+      if (navigator.audioSession) {
+        navigator.audioSession.type = "playback";
+        return;
+      }
+    } catch (e) { /* fall back to the media element */ }
+    if (!this.keepAlive) {
+      this.keepAlive = new Audio(silentWavUrl());
+      this.keepAlive.loop = true;
+      this.keepAlive.setAttribute("playsinline", "");
+    }
+    const played = this.keepAlive.play();
+    if (played && played.catch) played.catch(() => {});
+  },
+
+  resume() {
+    if (!this.ctx) return;
+    const resumed = this.ctx.resume();
+    if (resumed && resumed.catch) resumed.catch(() => {});
+    if (this.keepAlive && this.keepAlive.paused) {
+      const played = this.keepAlive.play();
+      if (played && played.catch) played.catch(() => {});
+    }
+  },
+
+  running() {
+    return this.on && this.ctx !== null && this.ctx.state === "running";
+  },
+
+  // The same beep in both modes; only the pan differs, and only because a
+  // different module returned it. Built with the factory methods, which older
+  // Safari has, with an equal-power panner where StereoPannerNode is missing.
+  beep(pan) {
+    if (!this.running()) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    osc.type = "sine";
+    osc.frequency.value = BEEP_HZ;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0, t);
+    gain.gain.linearRampToValueAtTime(BEEP_GAIN, t + 0.005);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + BEEP_MS / 1000);
+    let panner;
+    if (ctx.createStereoPanner) {
+      panner = ctx.createStereoPanner();
+      panner.pan.value = pan;
+    } else {
+      panner = ctx.createPanner();
+      panner.panningModel = "equalpower";
+      panner.setPosition(pan, 0, 1 - Math.abs(pan));
+    }
+    osc.connect(gain);
+    gain.connect(panner);
+    panner.connect(ctx.destination);
+    osc.start(t);
+    osc.stop(t + BEEP_MS / 1000 + 0.02);
+  },
+};
+
+function bytesOf(base64) {
+  const text = atob(base64);
+  const out = new Uint8Array(text.length);
+  for (let i = 0; i < text.length; i++) out[i] = text.charCodeAt(i);
+  return out;
+}
+
+async function sha256(bytes) {
+  if (!(window.crypto && crypto.subtle)) return null;
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function load(entry) {
+  const bytes = bytesOf(entry.bytes);
+  const { instance } = await WebAssembly.instantiate(bytes, {});
+  return { ...entry, screenPan: instance.exports.screen_pan, computed: await sha256(bytes) };
+}
+
+function moduleRow(m) {
+  const tr = document.createElement("tr");
+  const check = m.computed === null
+    ? '<span class="muted">(this browser cannot hash it here)</span>'
+    : m.computed === m.sha256
+      ? '<span class="ok">matches the recorded hash</span>'
+      : '<span class="bad">DIFFERS from the recorded hash ' + m.sha256 + "</span>";
+  tr.innerHTML = "<td>" + m.label + "</td><td>" + m.model + "<br><code>" + m.reply + "</code></td>"
+    + "<td><code>" + (m.computed || m.sha256) + "</code><br>" + check + "</td>";
+  return tr;
+}
+
+async function main() {
+  const original = await load(PAN_MODULES.original);
+  const reversed = await load(PAN_MODULES.reversed);
+  $("modules").append(moduleRow(original), moduleRow(reversed));
+
+  let active = original;
+  let playing = true;
+  let started = performance.now();
+  let pausedAt = 0;
+  let lastBeep = -Infinity;
+
+  function setMode(next) {
+    active = next;
+    $("mode-original").setAttribute("aria-pressed", String(next === original));
+    $("mode-reversed").setAttribute("aria-pressed", String(next === reversed));
+  }
+  $("mode-original").onclick = () => setMode(original);
+  $("mode-reversed").onclick = () => setMode(reversed);
+
+  // Synchronous on purpose: Safari keeps the gesture only until the first
+  // await.
+  $("sound").onclick = () => {
+    sound.set(!sound.on);
+    $("sound").textContent = sound.on ? "Sound: on" : "Sound: off";
+    $("sound").setAttribute("aria-pressed", String(sound.on));
+  };
+  document.addEventListener("pointerdown", () => { if (sound.on) sound.resume(); });
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden && sound.on) sound.resume();
+  });
+
+  $("pause").onclick = () => {
+    playing = !playing;
+    if (playing) started += performance.now() - pausedAt; else pausedAt = performance.now();
+    $("pause").textContent = playing ? "Pause" : "Play";
+  };
+
+  function frame(now) {
+    const elapsed = (playing ? now : pausedAt) - started;
+    const phase = elapsed % (SWEEP_MS + PAUSE_MS);
+    const x = Math.round(640 * Math.min(1, phase / SWEEP_MS));   // integer, 0 through 640
+    const value = active.screenPan(x);                             // the one call the host makes
+
+    const stage = $("stage").clientWidth;
+    const left = 16 + (stage - 32) * (x / 640);
+    $("ball").style.left = left + "px";
+    const reading = $("reading");
+    reading.textContent = "x = " + x + "\nscreen_pan(x) = " + value;
+    // Beside the ball, but never past either side of the stage.
+    const half = reading.offsetWidth / 2 + 8;
+    reading.style.left = Math.max(half, Math.min(stage - half, left)) + "px";
+    $("mark").style.left = (50 + 50 * clamp(value / PAN_RANGE)) + "%";
+
+    if (playing && phase < SWEEP_MS && elapsed - lastBeep >= BEEP_EVERY_MS) {
+      lastBeep = elapsed;
+      sound.beep(clamp(value / PAN_RANGE));
+    }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+}
+
+main().catch((e) => {
+  document.querySelector("main").insertAdjacentHTML("afterbegin",
+    '<p class="bad">The modules could not be loaded: ' + e + "</p>");
+});
+</script>
+</body>
+</html>
+```

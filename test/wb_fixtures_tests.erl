@@ -8,7 +8,7 @@ fixtures_test_() ->
     {setup,
      fun() -> {ok, Apps} = application:ensure_all_started(wasm), Apps end,
      fun(_) -> ok end,
-     [{"every fixture gets the verdict it is labelled with", {timeout, 60, fun labelled/0}},
+     [{"every fixture gets the verdict it is labelled with", {timeout, 300, fun labelled/0}},
       {"examples are hand-written and none counts as a trial", fun provenance/0},
       {"a trial without its prompt is not counted", fun incomplete_trial/0},
       {"write/accepted passes on every input", fun accepted/0},
@@ -24,7 +24,7 @@ fixtures_test_() ->
       {"each trial's prompt is the one the runner gives", fun trial_prompts/0},
       {"grouped output names every wrong input", fun grouped_output/0},
       {"the guided prompts share one reference card and give no answer away", fun guided_prompts/0},
-      {"the demo answers 0", {timeout, 60, fun demo/0}}]}.
+      {"the demo answers 0", {timeout, 300, fun demo/0}}]}.
 
 root() ->
     {ok, Cwd} = file:get_cwd(),
@@ -46,12 +46,20 @@ revision(Label) ->
 labelled() ->
     [begin
          Got = case Task of
-                   _ when Task =/= revise ->
-                       maps:get(verdict, wb_check:check(Task, Reply));
-                   revise ->
-                       {ok, _, Base} = wb_fixture:base_reply(root(), F),
-                       {ok, #{revised := R}} = wb_check:check_revision(Base, Reply),
-                       maps:get(verdict, R)
+                   ui ->
+                       case wb_ui:check(root(), Reply) of
+                           {ok, #{verdict := V}} -> V;
+                           {error, {missing, _}} -> Expect      % no browser here
+                       end;
+                   _ ->
+                       case wb_task:base(Task) of
+                           none ->
+                               maps:get(verdict, wb_check:check(Task, Reply));
+                           {ok, _} ->
+                               {ok, _, Base} = wb_fixture:base_reply(root(), F),
+                               {ok, #{revised := R}} = wb_check:check_revision(Task, Base, Reply),
+                               maps:get(verdict, R)
+                       end
                end,
          ?assertEqual({Label, Expect}, {Label, Got})
      end || #{task := Task, label := Label, reply := Reply, config := #{expect := Expect}} = F

@@ -178,10 +178,10 @@ async function main() {
     if (!document.hidden && sound.on) sound.resume();
   });
 
-  $("motion").onclick = () => {
+  $("pause").onclick = () => {
     playing = !playing;
     if (playing) started += performance.now() - pausedAt; else pausedAt = performance.now();
-    $("motion").textContent = playing ? "Pause" : "Play";
+    $("pause").textContent = playing ? "Pause" : "Play";
   };
 
   function frame(now) {

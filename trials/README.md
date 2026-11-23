@@ -28,6 +28,8 @@ For results across models and the limits of these samples, see the [project stat
 
 For the larger `digit_sum` task, follow the same steps with `digits` in place of `write`: `bin/wasm-bytes prompt digits` for the prompt, `trials/digits/<label>/` for the files, and `bin/wasm-bytes check digits` for the verdict.
 
+A `ui` trial is a whole HTML page, not hex. Its prompt comes from `bin/wasm-bytes prompt ui`, and `bin/wasm-bytes check ui trials/ui/<label>/reply.txt` checks it in Chrome. The check needs Node and Chrome. [Browser checks](../doc/ui.md)
+
 The DX-Ball pair works the same way. Use `pan` for the first prompt, then `reverse` with `{base, "pan/<label>"}.` for the second. The second prompt comes from `bin/wasm-bytes prompt reverse --base trials/pan/<label>/reply.txt`.
 
 For a revision, start with a passing write trial. Create `trials/revise/<label>/` and save the output of `bin/wasm-bytes prompt revise --base trials/write/<base-label>/reply.txt` as its prompt. Send it, save the raw reply, and check it with that same base. Include the same fields in its config and add `{base, "write/<base-label>"}.` using the actual write label.
@@ -55,6 +57,7 @@ scripts/record-claude-trial.sh revise my-label claude-sonnet-5-5 write/my-label
 scripts/record-claude-trial.sh digits my-label claude-sonnet-5-5
 scripts/record-claude-trial.sh pan my-label claude-sonnet-5-5
 scripts/record-claude-trial.sh reverse my-label claude-sonnet-5-5 pan/my-label
+scripts/record-claude-trial.sh ui my-label claude-sonnet-5-5
 ```
 
 The recorder also saves `response.json` with the model identity, turn count, and token usage reported by the CLI. It saves `module.sha256` too, the hash of the module the reply decodes to, in `shasum -a 256` format. It runs in an empty directory with tools, MCP servers, and settings disabled and a replacement system prompt. Claude Code still supplies some environment and account context. [Recording script](../scripts/record-claude-trial.sh)

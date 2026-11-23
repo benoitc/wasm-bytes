@@ -55,6 +55,18 @@ On 23 November 2026, the three Claude models each received one prompt describing
 
 All three `pan` replies are the same 76 bytes, which match the constructed example. Sonnet and Opus reversed the stereo by changing one byte, and Haiku by changing two. All six modules gave the same results in Wasmtime. The game's executable was not available, so these results were checked against REA's recorded instructions, not against the original game's execution. [Trials](../trials/pan/) · [Revisions](../trials/reverse/)
 
+## A demo page written by the model
+
+On 23 November 2026, the three Claude models each received one prompt asking for the whole DX-Ball demo page, as one HTML file. A browser check drove each page in headless Chrome with the recorded modules, then with stand-in modules. [How a page is checked](ui.md)
+
+| Model | Page | Verdict |
+| --- | --- | --- |
+| Claude Sonnet 5.5 | 8,138 bytes | all 13 checks pass |
+| Claude Opus 5.5 | 15,242 bytes | all 13 checks pass |
+| Claude Haiku 5.5 | 7,456 bytes | all 13 checks pass |
+
+Every page called `screen_pan` on the selected module for each value it showed or played. Each kept its beeps identical across modes, turned the sound on with one tap, and fit a phone screen. Haiku's page asks for media playback only through the audio-session API of recent Safari. The check simulates that API, so it does not cover older iOS. No one has listened to these pages on an iPhone yet. [Trials](../trials/ui/)
+
 ## Cross-engine and platform runs
 
 On 23 November 2026, the Sonnet write module ran in erlang_wasm 0.11.0 and in Wasmtime 50.0.1 on all 528 inputs. Both engines gave the reference answer every time and reported the same SHA-256 for the bytes they received. This held on three host configurations, all on one Apple silicon Mac:

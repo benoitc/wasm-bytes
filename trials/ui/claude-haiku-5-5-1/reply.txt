@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DX-Ball sound pan</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: #15171c;
+    color: #e8e8ee;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+  main {
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  h1 { font-size: 1.3rem; margin: 8px 0 0; font-weight: 600; }
+  #track {
+    position: relative;
+    width: 100%;
+    height: 64px;
+    background: #272a33;
+    border-radius: 10px;
+    border: 1px solid #3a3e4a;
+  }
+  #ball {
+    position: absolute;
+    top: 50%;
+    width: 20px;
+    height: 20px;
+    margin-top: -10px;
+    left: 10px;
+    border-radius: 50%;
+    background: #ffcc33;
+    box-shadow: 0 0 10px rgba(255, 204, 51, 0.5);
+  }
+  #reading {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 1.15rem;
+    margin: 0;
+    padding: 12px;
+    background: #1d2028;
+    border-radius: 8px;
+    min-height: 3em;
+    overflow-wrap: anywhere;
+  }
+  .row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  button {
+    flex: 1 1 140px;
+    min-height: 48px;
+    padding: 10px 14px;
+    font: inherit;
+    font-size: 1rem;
+    color: #e8e8ee;
+    background: #2e323d;
+    border: 1px solid #4a4f5e;
+    border-radius: 8px;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+  button[aria-pressed="true"] {
+    background: #3d6fd6;
+    border-color: #6b94ea;
+    color: #fff;
+  }
+  button:focus-visible { outline: 2px solid #ffcc33; outline-offset: 2px; }
+  p.note { font-size: 0.9rem; color: #9ba1b0; margin: 0; line-height: 1.4; }
+</style>
+</head>
+<body>
+<main>
+  <h1>DX-Ball pan test</h1>
+
+  <div id="track" aria-hidden="true"><div id="ball"></div></div>
+
+  <p id="reading" aria-live="polite">loading…</p>
+
+  <div class="row">
+    <button id="sound" aria-pressed="false">Sound off</button>
+    <button id="pause" aria-pressed="false">Pause</button>
+  </div>
+
+  <div class="row">
+    <button id="mode-original" aria-pressed="true">Original</button>
+    <button id="mode-reversed" aria-pressed="false">Reversed</button>
+  </div>
+
+  <p class="note">Turn the sound on and listen to where each beep sounds. Switch between Original and Reversed to compare. The numbers show the ball's x and the value returned by screen_pan for that x.</p>
+</main>
+
+<script src="modules.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  const TRACK_MAX = 640;   // x runs 0..640
+  const SPEED = 110;       // ball speed, pixels per second
+  const BEEP_MS = 200;     // beep interval
+  const BEEP_LEN = 0.09;   // beep length in seconds
+  const BEEP_FREQ = 880;   // beep pitch in Hz
+
+  const $ = (id) => document.getElementById(id);
+  const ball = $("ball");
+  const reading = $("reading");
+  const soundBtn = $("sound");
+  const pauseBtn = $("pause");
+  const origBtn = $("mode-original");
+  const revBtn = $("mode-reversed");
+
+  const screenPan = {};     // key -> exported screen_pan function
+  let mode = "original";
+  let pos = 0;              // ball position as a float; x = floor(pos)
+  let lastT = null;
+  let paused = false;
+  let soundOn = false;
+  let ctx = null;
+  let beepTimer = null;
+
+  function b64ToBytes(s) {
+    const bin = atob(s);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+
+  async function loadModules() {
+    if (!window.PAN_MODULES) throw new Error("modules.js did not load");
+    for (const key of ["original", "reversed"]) {
+      const def = window.PAN_MODULES[key];
+      if (!def || !def.bytes) throw new Error("missing module: " + key);
+      const result = await WebAssembly.instantiate(b64ToBytes(def.bytes), {});
+      const fn = result.instance.exports.screen_pan;
+      if (typeof fn !== "function") throw new Error("screen_pan not exported by " + key);
+      screenPan[key] = fn;
+    }
+  }
+
+  function currentX() {
+    return Math.floor(pos);
+  }
+
+  // Calls the selected module's screen_pan. Returns null if not ready.
+  function panFor(x) {
+    const fn = screenPan[mode];
+    return fn ? fn(x) : null;
+  }
+
+  function render() {
+    const x = currentX();
+    ball.style.left = "calc(10px + (100% - 20px) * " + (x / TRACK_MAX) + ")";
+    const v = panFor(x);
+    if (v === null) {
+      reading.textContent = "loading…";
+    } else {
+      reading.textContent = "x = " + x + "    screen_pan(x) = " + v;
+    }
+  }
+
+  function frame(t) {
+    if (lastT === null) lastT = t;
+    const dt = (t - lastT) / 1000;
+    lastT = t;
+    if (!paused) {
+      pos = (pos + dt * SPEED) % (TRACK_MAX + 1);
+    }
+    render();
+    requestAnimationFrame(frame);
+  }
+
+  function beep(v) {
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    const panner = ctx.createStereoPanner();
+
+    osc.type = "sine";
+    osc.frequency.value = BEEP_FREQ;
+
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.25, now + 0.005);
+    gain.gain.setValueAtTime(0.25, now + BEEP_LEN - 0.015);
+    gain.gain.linearRampToValueAtTime(0, now + BEEP_LEN);
+
+    panner.pan.value = v / 500;
+
+    osc.connect(gain);
+    gain.connect(panner);
+    panner.connect(ctx.destination);
+
+    osc.start(now);
+    osc.stop(now + BEEP_LEN + 0.01);
+    osc.onended = () => {
+      osc.disconnect();
+      gain.disconnect();
+      panner.disconnect();
+    };
+  }
+
+  function tick() {
+    const v = panFor(currentX());
+    if (v !== null) beep(v);
+  }
+
+  function setPressed(btn, on) {
+    btn.setAttribute("aria-pressed", on ? "true" : "false");
+  }
+
+  soundBtn.addEventListener("click", () => {
+    if (!soundOn) {
+      // Must be created and resumed inside a user gesture for iOS Safari.
+      if (!ctx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        ctx = new AC();
+      }
+      // Lets audio play even when the iPhone's silent switch is on.
+      if (navigator.audioSession) {
+        try { navigator.audioSession.type = "playback"; } catch (e) { /* ignore */ }
+      }
+      if (ctx.state !== "running") ctx.resume();
+
+      soundOn = true;
+      soundBtn.textContent = "Sound on";
+      setPressed(soundBtn, true);
+      tick();
+      beepTimer = setInterval(tick, BEEP_MS);
+    } else {
+      soundOn = false;
+      clearInterval(beepTimer);
+      beepTimer = null;
+      soundBtn.textContent = "Sound off";
+      setPressed(soundBtn, false);
+    }
+  });
+
+  pauseBtn.addEventListener("click", () => {
+    paused = !paused;
+    pauseBtn.textContent = paused ? "Resume" : "Pause";
+    setPressed(pauseBtn, paused);
+    render();
+  });
+
+  function selectMode(key) {
+    mode = key;
+    setPressed(origBtn, key === "original");
+    setPressed(revBtn, key === "reversed");
+    render();
+  }
+
+  origBtn.addEventListener("click", () => selectMode("original"));
+  revBtn.addEventListener("click", () => selectMode("reversed"));
+
+  loadModules()
+    .then(() => {
+      render();
+    })
+    .catch((err) => {
+      reading.textContent = "Error: " + err.message;
+      soundBtn.disabled = true;
+    });
+
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

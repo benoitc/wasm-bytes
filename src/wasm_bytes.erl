@@ -17,7 +17,7 @@
 -define(PLACEHOLDER, <<"{{MODULE_HEX}}">>).
 
 %% Tasks with one prompt, and tasks that revise another task's reply.
--define(ONE_PROMPT(T), (T =:= "write" orelse T =:= "digits" orelse T =:= "pan")).
+-define(ONE_PROMPT(T), (T =:= "write" orelse T =:= "digits" orelse T =:= "pan" orelse T =:= "ui")).
 -define(REVISION(T), (T =:= "revise" orelse T =:= "reverse")).
 
 -spec main([string()]) -> no_return().
@@ -65,6 +65,8 @@ command(["compare", Task, Reply]) ->
     compare(task(Task), Reply, undefined);
 command(["compare", Task, Reply, "--record", Dir]) ->
     compare(task(Task), Reply, Dir);
+command(["check", "ui", Reply | Opts]) ->
+    ui_check(Reply, Opts);
 command(["check", Task, Reply]) when ?ONE_PROMPT(Task) ->
     R = wb_check:check(task(Task), input(Reply)),
     io:put_chars(wb_report:report(R)),
@@ -109,8 +111,9 @@ usage() ->
     "       bin/wasm-bytes trace TRIAL-DIRECTORY [--wasm FILE]\n"
     "       bin/wasm-bytes compare TASK REPLY [--record DIRECTORY]\n"
     "       bin/wasm-bytes check write|digits|pan REPLY\n"
+    "       bin/wasm-bytes check ui PAGE [--original REPLY --reversed REPLY]\n"
     "       bin/wasm-bytes check revise|reverse REPLY --base REPLY\n"
-    "       bin/wasm-bytes prompt write|digits|pan [--guided]\n"
+    "       bin/wasm-bytes prompt write|digits|pan|ui [--guided]\n"
     "       bin/wasm-bytes prompt revise|reverse --base REPLY\n"
     "       bin/wasm-bytes pan-demo [--original REPLY --reversed REPLY] [--no-open]\n"
     "TASK is write, revise, digits, pan or reverse.\n"
@@ -125,6 +128,21 @@ check_revise(Task, Reply, Base) ->
             {ok, BaseTask} = wb_task:base(Task),
             io:put_chars(wb_report:base_refused(list_to_binary(Base), Report, BaseTask)),
             1
+    end.
+
+%% A generated page, checked in a browser with the recorded pan modules.
+ui_check(Reply, Opts) ->
+    {O, R} = wb_pan_demo:default_replies(),
+    {Original, Reversed, _} = pan_demo_opts(Opts, filename:join(root(), O), filename:join(root(), R), false),
+    case wb_ui:check(root(), input(Reply), {Original, Reversed}) of
+        {ok, Report} ->
+            io:put_chars(wb_ui:report(Report)),
+            exit_code(Report);
+        {error, {missing, What}} ->
+            throw({fail, io_lib:format("check ui needs Node and Chrome; ~p was not found. "
+                                       "Set NODE or CHROME to its path.", [What])});
+        {error, Why} ->
+            throw({fail, io_lib:format("the pan modules do not pass: ~0p", [Why])})
     end.
 
 pan_demo(Opts) ->
@@ -209,6 +227,7 @@ task("revise") -> revise;
 task("digits") -> digits;
 task("pan") -> pan;
 task("reverse") -> reverse;
+task("ui") -> ui;
 task(_) -> throw({usage, "wasm-bytes: the task is write, revise, digits, pan or reverse"}).
 
 %% A reply's path as the repository names it, when it is inside it.
@@ -303,6 +322,15 @@ replay(Root, #{task := Task, label := Label, kind := Kind, config := C} = F) ->
     Got = case {Problems, Task} of
               {[_ | _], _} ->
                   undefined;
+              {[], ui} ->
+                  case wb_ui:check(Root, maps:get(reply, F)) of
+                      {ok, R} ->
+                          io:put_chars(wb_ui:report(R)),
+                          maps:get(verdict, R);
+                      {error, {missing, What}} ->
+                          io:format("  skipped: needs Node and Chrome (~p not found)~n", [What]),
+                          skipped
+                  end;
               {[], _} ->
                   case wb_task:base(Task) of
                       none ->
@@ -313,7 +341,7 @@ replay(Root, #{task := Task, label := Label, kind := Kind, config := C} = F) ->
                           replay_revision(Root, F)
                   end
           end,
-    Ok = Problems =:= [] andalso Got =:= Expect,
+    Ok = Problems =:= [] andalso (Got =:= Expect orelse Got =:= skipped),
     io:format("   => ~ts~n~n", [case Ok of
                                      true -> "as labelled";
                                      false -> io_lib:format("NOT as labelled: got ~p", [Got])

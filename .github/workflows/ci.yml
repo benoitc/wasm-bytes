@@ -56,3 +56,33 @@ jobs:
       - name: Run the recorded Sonnet module in erlang_wasm and Wasmtime
         if: matrix.wasmtime
         run: bin/wasm-bytes compare write trials/write/claude-sonnet-5-5-1/reply.txt
+
+  ui:
+    # The generated demo pages, checked in Chromium: the full replay, with the
+    # browser the other jobs do not have.
+    name: pages in Chromium
+    runs-on: ubuntu-latest
+    container: erlang:29
+    env:
+      CHROME: /usr/bin/chromium
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Chromium and Node
+        run: apt-get update && apt-get install -y --no-install-recommends chromium nodejs
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/rebar3
+            _build
+          key: rebar3-otp29-${{ hashFiles('rebar.config', 'rebar.lock') }}
+
+      - name: Compile
+        run: rebar3 compile
+
+      - name: Replay every saved reply, pages included
+        run: bin/wasm-bytes demo
+
+      - name: Browser tests
+        run: rebar3 eunit --module=wb_ui_tests
