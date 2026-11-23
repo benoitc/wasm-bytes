@@ -1,0 +1,30 @@
+Below is a complete WebAssembly module in the binary format, as hex. It
+exports one function, named "screen_pan", with one i32 parameter and one i32
+result. The function turns a horizontal screen position x, from 0 at the
+left edge through 640 at the right edge, into a stereo pan value: negative
+is left of centre, positive is right of centre.
+
+{{MODULE_HEX}}
+
+Change the module to reverse the stereo: for every x, screen_pan(x) must
+return the value it returns now with its sign reversed. A position on the
+left of the screen then sounds on the right, a position on the right sounds
+on the left, and the centre stays at 0.
+
+Keep the function's name, parameter and result. Keep the module's shape:
+exactly one function, the exported one, nothing else exported, no imports,
+no memory and no start function.
+
+Reply with the complete revised module. You write every byte: the magic
+number and version, every section id, every section length, every function
+body length, every local declaration and every instruction. Nothing will be
+added to your bytes and no length will be corrected: the bytes you send are
+the bytes that run.
+
+Reply with only the bytes, as pairs of hexadecimal digits, for example:
+
+0f a0 7c
+
+Whitespace and line breaks between pairs are allowed. Do not split a pair.
+Do not add anything else: no explanation, no code fence, no 0x prefix, no
+comments.

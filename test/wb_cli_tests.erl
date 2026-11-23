@@ -122,7 +122,7 @@ errors() ->
     ?assert(has(E1, ~"unknown command")),
     ?assert(has(E1, ~"usage:")),
     {2, _, E2} = run(["compare", "rewrite", ?SONNET "/reply.txt"]),
-    ?assert(has(E2, ~"the task is write, revise or digits")),
+    ?assert(has(E2, ~"the task is write, revise, digits, pan or reverse")),
     {2, _, E3} = run(["check", "write", "no/such/reply.txt"]),
     ?assert(has(E3, ~"cannot read no/such/reply.txt")).
 

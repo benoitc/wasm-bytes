@@ -12,7 +12,7 @@
 %% recomputed and no byte is added.
 -module(wb_check).
 
--export([check/2, check_revision/2, limits/0]).
+-export([check/2, check_revision/2, check_revision/3, limits/0]).
 
 -export_type([verdict/0, report/0, revision/0]).
 
@@ -121,11 +121,19 @@ judge(Task, Results, R) ->
 %% whose result changed is listed.
 -spec check_revision(binary(), binary()) -> {ok, revision()} | {error, {base_not_accepted, report()}}.
 check_revision(BaseText, Text) ->
-    case check(write, BaseText) of
+    check_revision(revise, BaseText, Text).
+
+%% The same for any task that revises another, such as `reverse', whose base
+%% is a `pan' reply.
+-spec check_revision(wb_task:name(), binary(), binary()) ->
+          {ok, revision()} | {error, {base_not_accepted, report()}}.
+check_revision(Task, BaseText, Text) ->
+    {ok, BaseTask} = wb_task:base(Task),
+    case check(BaseTask, BaseText) of
         #{verdict := pass, bytes := BaseBytes} = Base ->
-            Revised = check(revise, Text),
+            Revised = check(Task, Text),
             Rev0 = #{base => Base, revised => Revised,
-                     intended => wb_task:intended_changes()},
+                     intended => wb_task:intended_changes(Task)},
             Rev1 = case Revised of
                        #{bytes := Bytes} -> Rev0#{hunks => wb_diff:hunks(BaseBytes, Bytes)};
                        _ -> Rev0

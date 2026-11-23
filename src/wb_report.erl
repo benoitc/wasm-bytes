@@ -1,7 +1,10 @@
 %% Turns check reports into the lines the runner prints.
 -module(wb_report).
 
--export([report/1, revision/2, base_refused/2, outcome/1]).
+%% Up to this many changed inputs are listed one per line.
+-define(LIST_CHANGES, 12).
+
+-export([report/1, revision/2, base_refused/2, base_refused/3, outcome/1]).
 
 %% Every stage the reply reached, then its verdict.
 -spec report(wb_check:report()) -> iodata().
@@ -11,8 +14,9 @@ report(R) ->
 %% `BaseName' says where the base came from: a fixture or a file.
 -spec revision(iodata(), wb_check:revision()) -> iodata().
 revision(BaseName, #{base := Base, revised := Revised} = Rev) ->
-    [line("base", io_lib:format("~ts: ~b bytes, passes task 1",
-                                [BaseName, byte_size(maps:get(bytes, Base))])),
+    [line("base", io_lib:format("~ts: ~b bytes, passes ~ts",
+                                [BaseName, byte_size(maps:get(bytes, Base)),
+                                 wb_task:label(maps:get(task, Base))])),
      stages(Revised),
      diff(Rev),
      changes(Rev),
@@ -20,7 +24,12 @@ revision(BaseName, #{base := Base, revised := Revised} = Rev) ->
 
 -spec base_refused(binary(), wb_check:report()) -> iodata().
 base_refused(Name, Base) ->
-    [line("base", [Name, " does not pass task 1, so it cannot be the base of a revision"]),
+    base_refused(Name, Base, write).
+
+-spec base_refused(binary(), wb_check:report(), wb_task:name()) -> iodata().
+base_refused(Name, Base, BaseTask) ->
+    [line("base", [Name, " does not pass ", wb_task:label(BaseTask),
+                   ", so it cannot be the base of a revision"]),
      report(Base)].
 
 stages(R) ->
@@ -97,17 +106,29 @@ calls(#{task := Task, results := Results, failures := Failures, wrong := Wrong})
      end,
      case Wrong of
          [] -> [];
-         _ -> [line("wrong", case Wrong of
-                                 [_] -> "1 answer differs from the reference";
-                                 _ -> io_lib:format("~b answers differ from the reference",
-                                                    [length(Wrong)])
-                             end),
-               grouped([{X, io_lib:format("expected ~b, got ~b", [Want, Got])}
-                        || {X, Want, Got} <- Wrong])]
+         [_] -> [line("wrong", "1 answer differs from the reference"), wrong_groups(Wrong)];
+         [{X1, W1, G1} | _] ->
+             [line("wrong", io_lib:format("~b answers differ from the reference", [length(Wrong)])),
+              line("first", io_lib:format("input ~b: expected ~b, got ~b", [X1, W1, G1])),
+              wrong_groups(Wrong)]
      end,
      line("answers", io_lib:format("~b of ~b match the reference", [Matched, Total]))];
 calls(_) ->
     [].
+
+%% By answer when there are few different wrong answers, as for a function
+%% that answers 0 or 1; otherwise by how far each answer is from the
+%% reference, which is what a numeric off-by-one looks like.
+wrong_groups(Wrong) ->
+    case length(lists:usort([{W, G} || {_, W, G} <- Wrong])) =< ?LIST_CHANGES of
+        true ->
+            grouped([{X, io_lib:format("expected ~b, got ~b", [W, G])} || {X, W, G} <- Wrong]);
+        false ->
+            grouped([{X, off_by(G - W)} || {X, W, G} <- Wrong])
+    end.
+
+off_by(D) when D > 0 -> io_lib:format("~b more than expected", [D]);
+off_by(D) -> io_lib:format("~b less than expected", [-D]).
 
 failure_text(not_run) -> "not run, after too many deadlines";
 failure_text(E) -> error_text(E).
@@ -185,16 +206,32 @@ bytes_lines(_Mark, <<>>) ->
 bytes_lines(Mark, Bin) ->
     [line("", [Mark, string:trim(L)]) || L <- string:split(iolist_to_binary(wb_hex:encode(Bin)), "\n", all), L =/= <<>>].
 
-changes(#{changes := Changes, intended := Intended}) ->
-    Total = length(wb_task:inputs(revise)),
+changes(#{changes := Changes, intended := Intended, revised := #{task := Task}}) ->
+    Total = length(wb_task:inputs(Task)),
     Requested = [X || {X, _, _} <- Intended],
+    Wanted = wanted(Intended),
+    Line = fun({X, B, A}) ->
+               line("", [io_lib:format("~b: ", [X]), outcome(B), " -> ", outcome(A),
+                         case lists:member({X, B, A}, Wanted) of
+                             true -> "  (requested)";
+                             false -> "  (not requested)"
+                         end])
+           end,
     [line("changes", io_lib:format("~b of ~b inputs changed result", [length(Changes), Total])),
-     [line("", [io_lib:format("~b: ", [X]), outcome(B), " -> ", outcome(A),
-                     case lists:member({X, B, A}, wanted(Intended)) of
-                         true -> "  (requested)";
-                         false -> "  (not requested)"
-                     end])
-      || {X, B, A} <- Changes],
+     case length(Changes) =< ?LIST_CHANGES of
+         true ->
+             [Line(C) || C <- Changes];
+         false ->
+             %% Too many to read one by one: the first and the last, the
+             %% requested ones as ranges, and every other one in full.
+             {Asked, Other} = lists:partition(fun(C) -> lists:member(C, Wanted) end, Changes),
+             [Line(hd(Changes)), line("", "..."), Line(lists:last(Changes)),
+              case Asked of
+                  [] -> [];
+                  _ -> grouped([{X, "requested"} || {X, _, _} <- Asked])
+              end,
+              [Line(C) || C <- Other]]
+     end,
      request(Changes, Intended, Requested)];
 changes(_) ->
     line("changes", "not measured: the revision did not run").
@@ -206,10 +243,21 @@ request(Changes, Intended, Requested) ->
     Missing = [{X, B, A} || {X, B, A} <- Intended,
                             not lists:member({X, {ok, B}, {ok, A}}, Changes)],
     Unrequested = [C || {X, _, _} = C <- Changes, not lists:member(X, Requested)],
-    Done = [io_lib:format("~b ~b -> ~b", [X, B, A]) || {X, B, A} <- Intended],
+    Done = case length(Intended) =< ?LIST_CHANGES of
+               true -> lists:join(", ", [io_lib:format("~b ~b -> ~b", [X, B, A])
+                                         || {X, B, A} <- Intended]);
+               false -> io_lib:format("all ~b requested changes", [length(Intended)])
+           end,
     case {Missing, Unrequested} of
         {[], []} ->
-            line("request", ["done: ", lists:join(", ", Done), "; no other result changed"]);
+            line("request", ["done: ", Done, "; no other result changed"]);
+        _ when length(Missing) > ?LIST_CHANGES ->
+            [line("request", io_lib:format("missing: ~b of ~b requested changes, on",
+                                           [length(Missing), length(Intended)])),
+             grouped([{X, "missing"} || {X, _, _} <- Missing]),
+             [line("request", [io_lib:format("not requested: ~b changed ", [X]),
+                               outcome(Bf), " -> ", outcome(Af)])
+              || {X, Bf, Af} <- Unrequested]];
         _ ->
             [[line("request", io_lib:format("missing: ~b should go ~b -> ~b", [X, B, A]))
               || {X, B, A} <- Missing],
