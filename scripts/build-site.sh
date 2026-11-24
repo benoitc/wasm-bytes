@@ -65,7 +65,7 @@ Each page below is a model's whole reply to a page prompt, published as it came 
 
 <p><img src="../../doc/media/ui-flow.svg" alt="The flow: the pan prompt gives the Original module, the reverse prompt the Reversed one, pan-demo puts both in modules.js, then the ui prompt gives the page, which loads modules.js in your browser and pans each beep by screen_pan(x) / 500." style="width:100%;max-width:560px;display:block;margin:8px auto 16px"></p>
 
-1. **Module prompt.** The [pan prompt](@REPO@/blob/main/@PAN_DIR@/prompt.txt) asks a model for the bytes of a WebAssembly module whose `screen_pan(x)` follows DX-Ball's recovered rule. The runner checks the reply before anything uses it.
+1. **Module prompt.** The [pan prompt](@REPO@/blob/main/@PAN_DIR@/prompt.txt) asks a model for the bytes of a WebAssembly module whose `screen_pan(x)` follows DX-Ball's recovered rule. The model writes every byte of the `.wasm` file itself. A reply is text, so each byte travels as two hex characters, and the runner turns them back into the same bytes, changing none, then checks them.
 2. **Reverse prompt.** The [reverse prompt](@REPO@/blob/main/@REV_DIR@/prompt.txt) gives the model its accepted module and asks for the same module with the stereo reversed. The runner checks that reply too.
 3. **Page prompt.** `bin/wasm-bytes pan-demo` puts the two accepted modules into `modules.js`, as base64. Then the [ui prompt](@REPO@/blob/main/prompts/ui.txt) asks a model for the page that loads `modules.js` and calls `screen_pan` on the module you select. The page prompt describes `modules.js`, but contains neither the module prompts nor the bytes.
 

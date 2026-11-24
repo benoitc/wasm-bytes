@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 584" role="img" aria-labelledby="t d">
 <title id="t">From three prompts to the demo page</title>
-<desc id="d">First, the pan prompt asks a model for the Original module, and the runner checks its bytes. Second, the reverse prompt gives the model that module and asks for the Reversed one, which the runner checks too. bin/wasm-bytes pan-demo puts both modules in modules.js. Third, the ui prompt asks a model for the page, which the checker tests in headless Chrome. In your browser, the page loads modules.js, calls screen_pan(x) on the selected module, and plays a beep panned by the value divided by 500.</desc>
+<desc id="d">First, the pan prompt asks a model for the Original module, and the model writes every byte of it; the runner checks those bytes. Second, the reverse prompt gives the model that module and asks for the Reversed one, which the runner checks too. bin/wasm-bytes pan-demo puts both modules in modules.js. Third, the ui prompt asks a model for the page, which the checker tests in headless Chrome. In your browser, the page loads modules.js, calls screen_pan(x) on the selected module, and plays a beep panned by the value divided by 500.</desc>
 <style>
   .card { fill: #ffffff; stroke: #dedad1; }
   .box { fill: #f4f2ec; stroke: #d3cfc4; }
@@ -36,7 +36,7 @@
 <text class="sub" x="108" y="76" text-anchor="middle">the rule, in words</text>
 <rect class="box" x="187" y="40" width="116" height="46" rx="6"/>
 <text class="main" x="245" y="60" text-anchor="middle">a model</text>
-<text class="sub" x="245" y="76" text-anchor="middle">replies with hex</text>
+<text class="sub" x="245" y="76" text-anchor="middle">writes every byte</text>
 <rect class="box" x="324" y="40" width="116" height="46" rx="6"/>
 <text class="main" x="382" y="60" text-anchor="middle">the runner</text>
 <text class="sub" x="382" y="76" text-anchor="middle">checks the bytes</text>
@@ -54,7 +54,7 @@
 <text class="sub" x="108" y="204" text-anchor="middle">+ Original module</text>
 <rect class="box" x="187" y="168" width="116" height="46" rx="6"/>
 <text class="main" x="245" y="188" text-anchor="middle">a model</text>
-<text class="sub" x="245" y="204" text-anchor="middle">replies with hex</text>
+<text class="sub" x="245" y="204" text-anchor="middle">writes every byte</text>
 <rect class="box" x="324" y="168" width="116" height="46" rx="6"/>
 <text class="main" x="382" y="188" text-anchor="middle">the runner</text>
 <text class="sub" x="382" y="204" text-anchor="middle">checks the bytes</text>
@@ -80,7 +80,7 @@
 <text class="sub" x="108" y="424" text-anchor="middle">the page to write</text>
 <rect class="box" x="187" y="388" width="116" height="46" rx="6"/>
 <text class="main" x="245" y="408" text-anchor="middle">a model</text>
-<text class="sub" x="245" y="424" text-anchor="middle">replies with HTML</text>
+<text class="sub" x="245" y="424" text-anchor="middle">writes the page</text>
 <rect class="box" x="324" y="388" width="116" height="46" rx="6"/>
 <text class="main" x="382" y="408" text-anchor="middle">the checker</text>
 <text class="sub" x="382" y="424" text-anchor="middle">13 browser checks</text>
