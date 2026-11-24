@@ -67,8 +67,9 @@ On 23 November 2026, the three Claude models each received one prompt asking for
 | Claude Opus 5.5 | 15,242 bytes | all 13 checks pass |
 | Claude Haiku 5.5 | 7,456 bytes | all 13 checks pass |
 | Inkling 2 Mini, local | 9,403 bytes | 12 of 13: no media playback requested for iOS |
+| Inkling 2 Mini, local, guided prompt | 12,702 bytes | all 13 checks pass |
 
-Every page called `screen_pan` on the selected module for each value it showed or played. Each kept its beeps identical across modes, turned the sound on with one tap, and fit a phone screen. Haiku's page asks for media playback only through the audio-session API of recent Safari. The check simulates that API, so it does not cover older iOS. The local model's page does everything else the prompt asks, but would probably be muted by an iPhone's silent switch. On the same day, the maintainer reported that the sound plays on an iPhone. Which pages they tried, and the iOS version, were not recorded. [Trials](../trials/ui/)
+Every page called `screen_pan` on the selected module for each value it showed or played. Each kept its beeps identical across modes, turned the sound on with one tap, and fit a phone screen. Haiku's page asks for media playback only through the audio-session API of recent Safari. The check simulates that API, so it does not cover older iOS. The local model's first page does everything else the prompt asks, but would probably be muted by an iPhone's silent switch. On 24 November, it received a guided prompt that adds one paragraph naming the audio-session API, and its new page passed all 13 checks. The paragraph says what to call, so the pass shows that the model follows it. One attempt cannot separate the paragraph's effect from the variation between attempts. [Guided ui prompt](../prompts/ui.guided.txt) On the same day, the maintainer reported that the sound plays on an iPhone. Which pages they tried, and the iOS version, were not recorded. [Trials](../trials/ui/)
 
 ## Cross-engine and platform runs
 

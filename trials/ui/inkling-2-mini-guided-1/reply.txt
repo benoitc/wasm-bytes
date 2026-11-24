@@ -1,0 +1,442 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>DX-Ball (1996) — recovered screen_pan</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0d1020;
+    --panel: #171b30;
+    --panel-2: #1f2440;
+    --text: #eef1ff;
+    --muted: #aab1d6;
+    --accent: #ffd166;
+    --accent-2: #6ee7ff;
+    --ball: #ff5d5d;
+    --line: #3a4270;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+  }
+  body {
+    background: radial-gradient(1200px 700px at 50% -10%, #232a52 0%, var(--bg) 60%);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    min-height: 100vh;
+    -webkit-text-size-adjust: 100%;
+  }
+  .app {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 18px 16px 28px;
+  }
+  header h1 {
+    font-size: clamp(1.15rem, 4.6vw, 1.6rem);
+    line-height: 1.25;
+    margin: 6px 0 8px;
+    letter-spacing: 0.02em;
+  }
+  .sub {
+    margin: 0 0 14px;
+    color: var(--muted);
+    font-size: 0.95rem;
+    line-height: 1.45;
+  }
+  code {
+    background: var(--panel-2);
+    padding: 0.1em 0.35em;
+    border-radius: 6px;
+    font-size: 0.9em;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 0 0 16px;
+  }
+  button {
+    appearance: none;
+    border: 1px solid var(--line);
+    background: var(--panel-2);
+    color: var(--text);
+    border-radius: 12px;
+    padding: 12px 16px;
+    font-size: 1rem;
+    font-weight: 650;
+    cursor: pointer;
+    min-height: 48px;
+    touch-action: manipulation;
+    transition: transform 0.06s ease, background 0.15s ease, border-color 0.15s ease;
+  }
+  button:hover { background: #262c4e; }
+  button:active { transform: translateY(1px); }
+  button[aria-pressed="true"] {
+    background: #2c3560;
+    border-color: var(--accent);
+    box-shadow: inset 0 0 0 1px var(--accent);
+  }
+  #sound[aria-pressed="true"] { border-color: var(--accent-2); box-shadow: inset 0 0 0 1px var(--accent-2); }
+  .stage {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 14px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 14px;
+  }
+  .track {
+    position: relative;
+    flex: 1 1 240px;
+    min-width: 0;
+    height: 64px;
+    border-radius: 14px;
+    background: linear-gradient(180deg, #11142a 0%, #0a0d1d 100%);
+    border: 1px solid var(--line);
+    overflow: hidden;
+  }
+  .lane {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    height: 2px;
+    transform: translateY(-50%);
+    background: repeating-linear-gradient(90deg, var(--line) 0 12px, transparent 12px 24px);
+    opacity: 0.8;
+  }
+  .tick {
+    position: absolute;
+    top: 8px;
+    bottom: 8px;
+    width: 1px;
+    background: var(--line);
+    opacity: 0.55;
+  }
+  .ball {
+    position: absolute;
+    top: 50%;
+    left: 14px;
+    width: 28px;
+    height: 28px;
+    margin: -14px 0 0 0;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #ffd9d9 0%, var(--ball) 45%, #7a1f1f 100%);
+    box-shadow: 0 0 14px rgba(255, 93, 93, 0.55);
+    transform: translateX(-50%);
+    will-change: left;
+  }
+  .reading {
+    flex: 0 1 auto;
+    min-width: 190px;
+    max-width: 100%;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 10px 12px;
+    font-variant-numeric: tabular-nums;
+    font-size: 0.98rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  .reading .mode { color: var(--accent); font-weight: 700; }
+  .reading .val { color: var(--accent-2); font-weight: 700; }
+  .hint {
+    margin: 12px 0 0;
+    color: var(--muted);
+    font-size: 0.85rem;
+    line-height: 1.5;
+  }
+  footer {
+    margin-top: 14px;
+    color: var(--muted);
+    font-size: 0.8rem;
+    line-height: 1.5;
+  }
+  @media (max-width: 560px) {
+    .stage { flex-direction: column; align-items: stretch; }
+    .reading { min-width: 0; }
+    .controls button { flex: 1 1 45%; }
+  }
+</style>
+</head>
+<body>
+<main class="app">
+  <header>
+    <h1>DX-Ball (1996) — recovered screen_pan</h1>
+    <p class="sub">A ball crosses the track. While sound is on, a short beep plays every 200&nbsp;ms, panned by the selected module&rsquo;s <code>screen_pan(x)</code>. Same beep in both modes; only the module changes.</p>
+  </header>
+
+  <section class="controls" aria-label="Controls">
+    <button id="sound" type="button" aria-pressed="false">Sound: off</button>
+    <button id="mode-original" type="button" aria-pressed="true">Original</button>
+    <button id="mode-reversed" type="button" aria-pressed="false">Reversed</button>
+    <button id="pause" type="button" aria-pressed="false">Pause</button>
+  </section>
+
+  <section class="stage" aria-label="Ball and reading">
+    <div class="track" id="track" aria-hidden="true">
+      <div class="lane"></div>
+      <div class="tick" style="left:0%"></div>
+      <div class="tick" style="left:25%"></div>
+      <div class="tick" style="left:50%"></div>
+      <div class="tick" style="left:75%"></div>
+      <div class="tick" style="left:100%"></div>
+      <div class="ball" id="ball"></div>
+    </div>
+    <div class="reading" id="reading" aria-live="polite">loading modules…</div>
+  </section>
+
+  <p class="hint">Sound on: tap <strong>Sound</strong> once. Tap again to stop. Switch <strong>Original</strong> / <strong>Reversed</strong> to hear the opposite pan. <strong>Pause</strong> freezes the ball; the reading still updates from the selected module.</p>
+
+  <footer>Ball position x is an integer from 0 (left edge) through 640 (right edge). Every value shown or played comes from calling <code>screen_pan</code> on the selected module — nothing is computed here.</footer>
+</main>
+
+<script src="modules.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  var TRAVEL_MS = 6000;   /* one full left-to-right pass */
+  var X_MAX = 640;
+  var BEEP_MS = 200;
+  var BEEP_LENGTH = 0.09;
+  var BEEP_FREQ = 660;
+  var BEEP_VOLUME = 0.22;
+  var BALL_SIZE = 28;
+
+  var els = {
+    sound: document.getElementById('sound'),
+    modeOriginal: document.getElementById('mode-original'),
+    modeReversed: document.getElementById('mode-reversed'),
+    pause: document.getElementById('pause'),
+    reading: document.getElementById('reading'),
+    track: document.getElementById('track'),
+    ball: document.getElementById('ball')
+  };
+
+  var state = {
+    x: 0,
+    elapsed: 0,
+    last: null,
+    paused: false,
+    soundOn: false,
+    selected: 'original',
+    ready: false
+  };
+
+  var modules = { original: null, reversed: null };
+  var labels = { original: 'Original', reversed: 'Reversed' };
+  var audioCtx = null;
+  var beepTimer = null;
+  var active = [];
+
+  function base64ToBytes(b64) {
+    var clean = String(b64 || '').replace(/\s+/g, '');
+    var bin = atob(clean);
+    var bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return bytes;
+  }
+
+  function loadModule(spec, name) {
+    if (!spec || typeof spec.bytes !== 'string') {
+      return Promise.reject(new Error(name + ': missing bytes'));
+    }
+    var bytes = base64ToBytes(spec.bytes);
+    return WebAssembly.instantiate(bytes, {}).then(function (result) {
+      var fn = result.instance.exports.screen_pan;
+      if (typeof fn !== 'function') {
+        throw new Error(name + ': module does not export screen_pan');
+      }
+      return fn;
+    });
+  }
+
+  function init() {
+    var specs = window.PAN_MODULES;
+    if (!specs) {
+      setReading('modules.js not found');
+      return;
+    }
+    labels.original = (specs.original && specs.original.label) || 'Original';
+    labels.reversed = (specs.reversed && specs.reversed.label) || 'Reversed';
+    Promise.all([
+      loadModule(specs.original, 'original'),
+      loadModule(specs.reversed, 'reversed')
+    ]).then(function (fns) {
+      modules.original = fns[0];
+      modules.reversed = fns[1];
+      state.ready = true;
+      updateReading();
+    }).catch(function (err) {
+      setReading('failed to load modules: ' + (err && err.message ? err.message : err));
+    });
+  }
+
+  function selectedFn() {
+    return modules[state.selected] || null;
+  }
+
+  function currentLabel() {
+    return labels[state.selected] || state.selected;
+  }
+
+  function setReading(text) {
+    els.reading.textContent = text;
+  }
+
+  function updateReading() {
+    var fn = selectedFn();
+    if (!fn) {
+      setReading('loading modules…');
+      return;
+    }
+    var v;
+    try {
+      v = fn(state.x);
+    } catch (err) {
+      setReading(currentLabel() + ' · x = ' + state.x + ' · screen_pan(x) = error');
+      return;
+    }
+    els.reading.innerHTML = '';
+    var mode = document.createElement('span');
+    mode.className = 'mode';
+    mode.textContent = currentLabel() + '  ';
+    var rest = document.createTextNode('x = ' + state.x + '  ·  screen_pan(x) = ');
+    var val = document.createElement('span');
+    val.className = 'val';
+    val.textContent = String(v);
+    els.reading.appendChild(mode);
+    els.reading.appendChild(rest);
+    els.reading.appendChild(val);
+  }
+
+  function render() {
+    var pct = state.x / X_MAX;
+    els.ball.style.left = 'calc(' + (BALL_SIZE / 2) + 'px + (100% - ' + BALL_SIZE + 'px) * ' + pct + ')';
+  }
+
+  function frame(now) {
+    if (state.last === null) state.last = now;
+    var dt = now - state.last;
+    state.last = now;
+    if (!state.paused) {
+      state.elapsed += dt;
+      var t = (state.elapsed % TRAVEL_MS) / TRAVEL_MS;
+      state.x = Math.min(X_MAX, Math.floor(t * (X_MAX + 1)));
+    }
+    render();
+    updateReading();
+    requestAnimationFrame(frame);
+  }
+
+  function stopActiveBeeps() {
+    for (var i = 0; i < active.length; i++) {
+      try { active[i].stop(); } catch (e) {}
+    }
+    active = [];
+  }
+
+  function playBeep() {
+    if (!state.soundOn) return;
+    if (!audioCtx) return;
+    var fn = selectedFn();
+    if (!fn) return;
+    var v;
+    try {
+      v = fn(state.x);
+    } catch (err) {
+      return;
+    }
+    var pan = v / 500;
+    var t = audioCtx.currentTime;
+    var osc = audioCtx.createOscillator();
+    var gain = audioCtx.createGain();
+    var panner = audioCtx.createStereoPanner();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(BEEP_FREQ, t);
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(BEEP_VOLUME, t + 0.005);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + BEEP_LENGTH);
+    panner.pan.setValueAtTime(pan, t);
+    osc.connect(gain);
+    gain.connect(panner);
+    panner.connect(audioCtx.destination);
+    osc.start(t);
+    osc.stop(t + BEEP_LENGTH + 0.02);
+    active.push(osc);
+    osc.onended = function () {
+      var idx = active.indexOf(osc);
+      if (idx >= 0) active.splice(idx, 1);
+    };
+  }
+
+  function startSound() {
+    if (navigator.audioSession) {
+      try { navigator.audioSession.type = 'playback'; } catch (e) {}
+    }
+    var Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!audioCtx && Ctx) {
+      try { audioCtx = new Ctx(); } catch (e) { audioCtx = null; }
+    }
+    if (audioCtx && audioCtx.state === 'suspended') {
+      try {
+        var p = audioCtx.resume();
+        if (p && typeof p.catch === 'function') p.catch(function () {});
+      } catch (e) {}
+    }
+    state.soundOn = true;
+    els.sound.textContent = 'Sound: on';
+    els.sound.setAttribute('aria-pressed', 'true');
+    playBeep();
+    beepTimer = setInterval(playBeep, BEEP_MS);
+  }
+
+  function stopSound() {
+    state.soundOn = false;
+    if (beepTimer) { clearInterval(beepTimer); beepTimer = null; }
+    stopActiveBeeps();
+    els.sound.textContent = 'Sound: off';
+    els.sound.setAttribute('aria-pressed', 'false');
+  }
+
+  function selectMode(mode) {
+    state.selected = mode;
+    var orig = mode === 'original';
+    els.modeOriginal.setAttribute('aria-pressed', String(orig));
+    els.modeReversed.setAttribute('aria-pressed', String(!orig));
+    updateReading();
+  }
+
+  els.sound.addEventListener('click', function () {
+    if (state.soundOn) {
+      stopSound();
+    } else {
+      startSound();
+    }
+  });
+
+  els.modeOriginal.addEventListener('click', function () { selectMode('original'); });
+  els.modeReversed.addEventListener('click', function () { selectMode('reversed'); });
+
+  els.pause.addEventListener('click', function () {
+    state.paused = !state.paused;
+    els.pause.textContent = state.paused ? 'Resume' : 'Pause';
+    els.pause.setAttribute('aria-pressed', String(state.paused));
+  });
+
+  init();
+  selectMode('original');
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

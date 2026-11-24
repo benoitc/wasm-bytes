@@ -102,6 +102,10 @@ command(_) ->
     throw({usage, "wasm-bytes: unknown command"}).
 
 revision_prompt(Task, Base, Variant) ->
+    case wb_task:prompt(task(Task), Variant) of
+        {ok, _} -> ok;
+        {error, no_guided_prompt} -> throw({usage, ["wasm-bytes: the ", Task, " task has no guided prompt"]})
+    end,
     case render_prompt(root(), task(Task), input(Base), Variant) of
         {ok, Prompt} ->
             io:put_chars(Prompt),

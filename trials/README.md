@@ -38,12 +38,13 @@ Run `bin/wasm-bytes demo` to confirm the new trial replays as labelled. The demo
 
 ## Use the guided prompt
 
-The `write`, `digits`, `pan` and `reverse` tasks also have a guided prompt. It adds a reference card to the same task: the module layout, how numbers are encoded, and the byte of each instruction with the order of its operands. It also asks the model to work in numbered steps. Use it to test whether a model can encode a program when it does not have to recall the opcode table. Keep the baseline prompt for results you want to compare with earlier trials. The card for `pan` and `reverse` adds the floating-point instructions and how a double is encoded. [Guided write prompt](../prompts/write.guided.txt) · [Guided digit_sum prompt](../prompts/digits.guided.txt) · [Guided pan prompt](../prompts/pan.guided.txt)
+The `write`, `digits`, `pan`, `reverse` and `ui` tasks also have a guided prompt. It adds a reference card to the same task: the module layout, how numbers are encoded, and the byte of each instruction with the order of its operands. It also asks the model to work in numbered steps. Use it to test whether a model can encode a program when it does not have to recall the opcode table. Keep the baseline prompt for results you want to compare with earlier trials. The card for `pan` and `reverse` adds the floating-point instructions and how a double is encoded. The guided `ui` prompt adds one paragraph under the sound button: how to request media playback on an iPhone. [Guided write prompt](../prompts/write.guided.txt) · [Guided digit_sum prompt](../prompts/digits.guided.txt) · [Guided pan prompt](../prompts/pan.guided.txt) · [Guided ui prompt](../prompts/ui.guided.txt)
 
 ```sh
 bin/wasm-bytes prompt write --guided
 bin/wasm-bytes prompt digits --guided
 bin/wasm-bytes prompt pan --guided
+bin/wasm-bytes prompt ui --guided
 bin/wasm-bytes prompt reverse --base trials/pan/<label>/reply.txt --guided
 ```
 

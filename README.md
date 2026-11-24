@@ -86,7 +86,7 @@ bin/wasm-bytes pan-demo
 
 ## Can the model write the demo page too?
 
-The page that moves the ball and plays the beeps was written by hand. We also asked each model to write that page as one HTML file. The prompt fixes how the page gets the recorded modules and which buttons it needs. It also asks the page to work on an iPhone with the silent switch on. A browser check then drives each page in Chrome. It records every call to `screen_pan` and every beep the page plays, then swaps in stand-in modules to confirm the page doesn't compute the pan itself. All three recorded pages passed every check. You can open them on the site. [Prompt](prompts/ui.txt) · [Pages the models wrote](https://benoitc.github.io/wasm-bytes/demo/ui/) · [How a page is checked](doc/ui.md)
+The page that moves the ball and plays the beeps was written by hand. We also asked each model to write that page as one HTML file. The prompt fixes how the page gets the recorded modules and which buttons it needs. It also asks the page to work on an iPhone with the silent switch on. A browser check then drives each page in Chrome. It records every call to `screen_pan` and every beep the page plays, then swaps in stand-in modules to confirm the page doesn't compute the pan itself. The three Claude pages passed every check. A local model's page missed only the iPhone playback request, and passed every check once a guided prompt named the API to call. You can open them all on the site. [Prompt](prompts/ui.txt) · [Pages the models wrote](https://benoitc.github.io/wasm-bytes/demo/ui/) · [How a page is checked](doc/ui.md)
 
 The check needs Node and Chrome:
 
