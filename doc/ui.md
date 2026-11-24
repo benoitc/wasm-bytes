@@ -1,10 +1,17 @@
 # A demo page written by the model
 
-The DX-Ball demo has two parts: the WebAssembly modules that compute the pan, and the page that moves the ball and plays the beeps. In the `ui` task, the model writes the page too. Read this page to see what the model receives, how a generated page is checked in a browser, what the recorded pages did, and what the checks cannot tell you. The runs below were recorded on 23 November 2026. [DX-Ball experiment](dx-ball.md) · [Prompt](../prompts/ui.txt)
+The DX-Ball demo has two parts: the WebAssembly modules that compute the pan, and the page that moves the ball and plays the beeps. In the `ui` task, the model writes the page too. Read this page to see what the model receives, how a generated page is checked in a browser, what the recorded pages did, and what the checks cannot tell you. The runs below were recorded on 23 and 24 November 2026. [DX-Ball experiment](dx-ball.md) · [Prompt](../prompts/ui.txt) · [Guided prompt](../prompts/ui.guided.txt)
 
 ## What the model receives
 
 The prompt describes the demo and fixes the contract a page must keep. The page loads `modules.js`, which supplies the two recorded modules as base64. It gets every pan value by calling `screen_pan(x)` on the selected module. It plays a beep every 200 ms through a `StereoPannerNode` whose pan is the value divided by 500. Every beep is the same in both modes. The controls use fixed element ids (`sound`, `mode-original`, `mode-reversed`, `pause`, `reading`), so that a test can find them. The prompt also asks for three outcomes without saying how to reach them: the page works in Safari on an iPhone with the silent switch on, makes no network request, and fits a phone screen. The reply is saved as `index.html` and opened as it is.
+
+The guided prompt is the same prompt with one paragraph added under the `sound` button. It says to set `navigator.audioSession.type` to `"playback"` inside the click handler, before creating or resuming the audio context. Print either prompt with:
+
+```sh
+bin/wasm-bytes prompt ui
+bin/wasm-bytes prompt ui --guided
+```
 
 ## Check a page
 
@@ -55,7 +62,9 @@ Each model received the prompt once, through the Claude Code CLI with tools off.
 
 A local model, Inkling 2 Mini (`inkling-2-mini:26b-a5b-nvfp4`, through Ollama), received the same prompt once. Its 9,403-byte page passes 12 of the 13 checks. It uses the recorded modules for every value, pans every beep correctly, and its controls work. It never asks for media playback, so `ios_audio` fails. On an iPhone with the silent switch on, its sound would probably stay muted. Its verdict is `ui_failed`. The site lists it with that verdict, below the pages that passed. [Inkling's page](../trials/ui/inkling-2-mini-1/reply.txt)
 
-All three pages create a fresh oscillator for each beep, pan it with a `StereoPannerNode`, and call `screen_pan` on the selected module for every value. Before publishing, each page was read in full. None makes a network request, uses storage, or evaluates code. [Sonnet](../trials/ui/claude-sonnet-5-5-1/reply.txt) · [Opus](../trials/ui/claude-opus-5-5-1/reply.txt) · [Haiku](../trials/ui/claude-haiku-5-5-1/reply.txt)
+On 24 November 2026, Inkling received the guided prompt once. Its 12,702-byte page passes all 13 checks. When you turn the sound on, it sets the audio session to `playback`, then creates or resumes the audio context, as the added paragraph says. Like Haiku's page, it has no media-element fallback. The paragraph names the API to call, so this pass shows that Inkling follows the instruction, not that it knows the iPhone rule. With one attempt per prompt, it also cannot separate the effect of the paragraph from the variation between attempts. [Inkling's guided page](../trials/ui/inkling-2-mini-guided-1/reply.txt)
+
+All three pages create a fresh oscillator for each beep, pan it with a `StereoPannerNode`, and call `screen_pan` on the selected module for every value. Before publishing, each page was read in full, Inkling's two included. None makes a network request, uses storage, or evaluates code. [Sonnet](../trials/ui/claude-sonnet-5-5-1/reply.txt) · [Opus](../trials/ui/claude-opus-5-5-1/reply.txt) · [Haiku](../trials/ui/claude-haiku-5-5-1/reply.txt)
 
 You can open each page on the site. It loads the same recorded modules as the hand-written demo. [Pages the models wrote](https://benoitc.github.io/wasm-bytes/demo/ui/)
 
@@ -66,4 +75,4 @@ Four constructed examples show what the checks catch. `reference` is the hand-wr
 - **Whether you hear it.** The browser plays with its output muted. The checks record what the page asks the browser to play, not what reaches a speaker.
 - **Safari on an iPhone.** The checks run in Chrome. `ios_audio` simulates the audio-session API that Safari 17 provides, so a page that uses only that API passes, as Haiku's does. Older iOS needs the media-element fallback, which no check exercises. Hearing a page on a phone is still a manual step.
 - **How a page looks.** Apart from fitting a 390 px screen, the checks do not judge the design.
-- **How often a model succeeds.** Each model made one attempt.
+- **How often a model succeeds.** Each model made one attempt with each prompt it received.

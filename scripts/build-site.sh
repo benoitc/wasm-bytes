@@ -47,7 +47,7 @@ mkdir -p "$(dirname "$GALLERY")" "$OUT/demo/ui"
 cat > "$GALLERY" <<'INTRO'
 # Pages the models wrote
 
-Each page below is a model's whole reply to the [ui prompt](https://github.com/benoitc/wasm-bytes/blob/main/prompts/ui.txt), published as it came back. The pages in the first section passed every browser check: each uses the recorded `screen_pan` modules for every value it shows or plays, turns its sound on with one tap, asks for media playback so that an iPhone's silent switch should not mute it, and fits a phone screen. The pages in the second section failed at least one check, and their verdict says which. Open a page on its own to hear it on an iPhone. [How the pages are checked](../../doc/ui.html)
+Each page below is a model's whole reply to the [ui prompt](https://github.com/benoitc/wasm-bytes/blob/main/prompts/ui.txt), or to its [guided version](https://github.com/benoitc/wasm-bytes/blob/main/prompts/ui.guided.txt) where the entry says so, published as it came back. The pages in the first section passed every browser check: each uses the recorded `screen_pan` modules for every value it shows or plays, turns its sound on with one tap, asks for media playback so that an iPhone's silent switch should not mute it, and fits a phone screen. The pages in the second section failed at least one check, and their verdict says which. Open a page on its own to hear it on an iPhone. [How the pages are checked](../../doc/ui.html)
 
 INTRO
 
@@ -56,14 +56,20 @@ gallery_entry() {
     dir=$1 note=$2
     label=$(basename "$dir")
     model=$(sed -n 's/^{model, "\([^"]*\)"}\./\1/p' "$dir/fixture.config" | sed 's/, digest .*//')
+    heading=$model
+    if grep -q '^{prompt_variant, guided}' "$dir/fixture.config"; then
+        heading="$model, guided prompt"
+        note="<p>Reply to the <a href=\"$REPO_URL/blob/main/prompts/ui.guided.txt\">guided ui prompt</a>, which adds one paragraph on how to request media playback on an iPhone.</p>
+$note"
+    fi
     mkdir -p "$OUT/demo/ui/$label"
     cp "$dir/reply.txt" "$OUT/demo/ui/$label/index.html"
     cp "$ROOT/_build/pan-demo/modules.js" "$OUT/demo/ui/$label/modules.js"
     cat >> "$GALLERY" <<PAGE
-### $model
+### $heading
 
 $note<p><a href="$label/index.html">Open the page</a> · <a href="$REPO_URL/blob/main/trials/ui/$label/reply.txt">Its reply on GitHub</a> · <a href="$REPO_URL/blob/main/trials/ui/$label/fixture.config">Model, settings and verdict</a></p>
-<iframe src="$label/index.html" title="Demo page written by $model" sandbox="allow-scripts" allow="autoplay" loading="lazy" style="width:100%;height:720px;border:1px solid var(--line);border-radius:8px"></iframe>
+<iframe src="$label/index.html" title="Demo page written by $heading" sandbox="allow-scripts" allow="autoplay" loading="lazy" style="width:100%;height:720px;border:1px solid var(--line);border-radius:8px"></iframe>
 
 PAGE
 }
