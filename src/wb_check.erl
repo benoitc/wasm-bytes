@@ -12,9 +12,9 @@
 %% recomputed and no byte is added.
 -module(wb_check).
 
--export([check/2, check_revision/2, check_revision/3, limits/0]).
+-export([check/2, check_plan/2, check_revision/2, check_revision/3, limits/0]).
 
--export_type([verdict/0, report/0, revision/0]).
+-export_type([verdict/0, report/0, revision/0, plan/0]).
 
 -define(MAX_TEXT_BYTES, 65_536).
 -define(MAX_MODULE_BYTES, 4_096).
@@ -29,14 +29,28 @@
                  | wrong_answer
                  | runner_error.
 
--type report() :: #{task := wb_task:name(),
+%% What a reply is checked against. A task's plan comes from `wb_task'; a
+%% write case builds its own from its recorded calls (`wb_case'). `strict' is
+%% the task profile: one function and nothing else. `open' asks only for the
+%% export, with its signature, and no imports.
+-type plan() :: #{task := wb_task:name() | binary(),
+                  export := binary(),
+                  params := [atom()],
+                  results := [atom()],
+                  inputs := [wb_exec:input()],
+                  expected := fun((wb_exec:input()) -> integer()),
+                  profile := strict | open,
+                  limits => #{fuel => pos_integer(), deadline_ms => pos_integer()}}.
+
+-type report() :: #{task := wb_task:name() | binary(),
                     verdict := verdict(),
                     why => term(),
                     text_bytes := non_neg_integer(),
                     bytes => binary(),
-                    results => [{integer(), wb_exec:outcome()}],
-                    failures => [{integer() | instantiate, term()}],
-                    wrong => [{integer(), integer(), integer()}]}.
+                    plan => #{atom() => term()},
+                    results => [{wb_exec:input(), wb_exec:outcome()}],
+                    failures => [{wb_exec:input() | instantiate, term()}],
+                    wrong => [{wb_exec:input(), integer(), integer()}]}.
 
 -type revision() :: #{base := report(),
                       revised := report(),
@@ -52,8 +66,23 @@ limits() ->
 
 -spec check(wb_task:name(), binary()) -> report().
 check(Task, Text) ->
-    R = #{task => Task, text_bytes => byte_size(Text)},
-    try stages(Task, Text, R)
+    #{export := Export, params := Params, results := Results} = wb_task:get(Task),
+    check_plan(#{task => Task, export => Export, params => Params, results => Results,
+                 inputs => wb_task:inputs(Task), expected => fun(X) -> wb_task:expected(Task, X) end,
+                 profile => strict},
+               Text).
+
+%% The same stages against any plan. A case's report also carries the plan's
+%% interface and input count, so the report can be printed without `wb_task'.
+-spec check_plan(plan(), binary()) -> report().
+check_plan(#{task := Task} = Plan, Text) ->
+    R0 = #{task => Task, text_bytes => byte_size(Text)},
+    R = case is_atom(Task) of
+            true -> R0;
+            false -> R0#{plan => maps:merge(maps:with([export, params, results, profile, limits], Plan),
+                                            #{inputs => length(maps:get(inputs, Plan))})}
+        end,
+    try stages(Plan, Text, R)
     catch
         Class:Reason:Stack ->
             %% A crash here is a bug in the runner or in erlang_wasm, not
@@ -61,9 +90,9 @@ check(Task, Text) ->
             R#{verdict => runner_error, why => {Class, Reason, Stack}}
     end.
 
-stages(_Task, Text, R) when byte_size(Text) > ?MAX_TEXT_BYTES ->
+stages(_Plan, Text, R) when byte_size(Text) > ?MAX_TEXT_BYTES ->
     R#{verdict => too_large, why => {text, byte_size(Text), ?MAX_TEXT_BYTES}};
-stages(Task, Text, R) ->
+stages(Plan, Text, R) ->
     case wb_hex:decode(Text) of
         {error, Why} ->
             R#{verdict => malformed_hex, why => Why};
@@ -71,10 +100,10 @@ stages(Task, Text, R) ->
             R#{verdict => too_large, bytes => Bytes,
                why => {bytes, byte_size(Bytes), ?MAX_MODULE_BYTES}};
         {ok, Bytes} ->
-            compile(Task, Bytes, R#{bytes => Bytes})
+            compile(Plan, Bytes, R#{bytes => Bytes})
     end.
 
-compile(Task, Bytes, R) ->
+compile(Plan, Bytes, R) ->
     case wasm:compile(Bytes) of
         {error, #{class := malformed} = E} ->
             R#{verdict => malformed_wasm, why => E};
@@ -83,30 +112,34 @@ compile(Task, Bytes, R) ->
         {error, E} ->
             R#{verdict => runner_error, why => E};
         {ok, Module} ->
-            profile(Task, Bytes, Module, R)
+            profile(Plan, Bytes, Module, R)
     end.
 
-profile(Task, Bytes, Module, R) ->
-    case wb_profile:check(Bytes, Task) of
+profile(Plan, Bytes, Module, R) ->
+    case profile_check(Plan, Bytes) of
         {error, Violations} ->
             R#{verdict => interface_mismatch, why => Violations};
         ok ->
-            run(Task, Module, R)
+            run(Plan, Module, R)
     end.
 
-run(Task, Module, R) ->
-    #{export := Export} = wb_task:get(Task),
-    case wb_exec:run(Module, Export, wb_task:inputs(Task)) of
+profile_check(#{profile := strict, task := Task}, Bytes) ->
+    wb_profile:check(Bytes, Task);
+profile_check(#{profile := open, export := Export, params := Params, results := Results}, Bytes) ->
+    wb_profile:check_open(Bytes, Export, {Params, Results}).
+
+run(#{export := Export, inputs := Inputs} = Plan, Module, R) ->
+    case wb_exec:run(Module, Export, Inputs, maps:get(limits, Plan, #{})) of
         {error, {instantiate, Why}} ->
             R#{verdict => execution_failure, results => [],
                failures => [{instantiate, Why}], wrong => []};
         {ok, Results} ->
-            judge(Task, Results, R#{results => Results})
+            judge(Plan, Results, R#{results => Results})
     end.
 
-judge(Task, Results, R) ->
+judge(#{expected := Expected}, Results, R) ->
     Failures = [{X, E} || {X, {error, E}} <- Results] ++ [{X, not_run} || {X, not_run} <- Results],
-    Answers = [{X, wb_task:expected(Task, X), Got} || {X, {ok, Got}} <- Results],
+    Answers = [{X, Expected(X), Got} || {X, {ok, Got}} <- Results],
     Wrong = [A || {_, Want, Got} = A <- Answers, Want =/= Got],
     Verdict = if
                   Failures =/= [] -> execution_failure;

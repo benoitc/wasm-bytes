@@ -7,7 +7,7 @@
 %% file was named.
 -module(wb_compare).
 
--export([compare/3, report/1, record/2, summarize/1]).
+-export([compare/3, compare_plan/3, report/1, record/2, summarize/1]).
 
 -export_type([comparison/0]).
 
@@ -17,25 +17,34 @@
 -spec compare(wb_task:name(), binary(), binary()) ->
           {ok, comparison()} | {error, wasmtime_not_found | {malformed_hex, term()}}.
 compare(Task, Text, ReplyName) ->
+    #{export := Export, params := Params, results := Results} = wb_task:get(Task),
+    compare_plan(#{task => Task, export => Export, params => Params, results => Results,
+                   inputs => wb_task:inputs(Task),
+                   expected => fun(X) -> wb_task:expected(Task, X) end, profile => strict},
+                 Text, ReplyName).
+
+%% The same for any plan, such as a write case's (`wb_case:plan/1').
+-spec compare_plan(wb_check:plan(), binary(), binary()) ->
+          {ok, comparison()} | {error, wasmtime_not_found | {malformed_hex, term()}}.
+compare_plan(Plan, Text, ReplyName) ->
     case {wb_wasmtime:find(), wb_hex:decode(Text)} of
         {{error, not_found}, _} -> {error, wasmtime_not_found};
         {_, {error, Why}} -> {error, {malformed_hex, Why}};
-        {{ok, Exe}, {ok, Bytes}} -> {ok, run(Task, Text, Bytes, Exe, ReplyName)}
+        {{ok, Exe}, {ok, Bytes}} -> {ok, run(Plan, Text, Bytes, Exe, ReplyName)}
     end.
 
-run(Task, Text, Bytes, Exe, ReplyName) ->
-    Inputs = wb_task:inputs(Task),
-    #{export := Export} = wb_task:get(Task),
-    Check = wb_check:check(Task, Text),
+run(#{task := Task, inputs := Inputs, export := Export, expected := Expected} = Plan,
+    Text, Bytes, Exe, ReplyName) ->
+    Check = wb_check:check_plan(Plan, Text),
     Erlang = erlang_outcomes(Check, Inputs),
     Dir = temp_dir(),
     Wasm = filename:join(Dir, "module.wasm"),
     ok = file:write_file(Wasm, Bytes),
     {ok, OnDisk} = file:read_file(Wasm),
-    Wasmtime = try wb_wasmtime:run(Exe, Wasm, Export, Inputs)
+    Wasmtime = try wb_wasmtime:run(Exe, Wasm, Export, Inputs, maps:get(limits, Plan, #{}))
                after file:del_dir_r(Dir)
                end,
-    Rows = [{X, wb_task:expected(Task, X), E, W}
+    Rows = [{X, Expected(X), E, W}
             || {{X, E}, {X, W}} <- lists:zip(Erlang, Wasmtime)],
     #{erlang_matches := ErlMatches, wasmtime_matches := WtMatches} = S = summarize(Rows),
     #{task => Task,
@@ -110,8 +119,14 @@ report(#{module_sha256 := Hash, erlang_wasm := Erl, wasmtime := Wt, inputs := To
     [line("reply", maps:get(reply, C)),
      line("module", io_lib:format("~b bytes, sha256 ~ts", [maps:get(module_bytes, C), Hash])),
      line("host", wb_host:describe(maps:get(host, C))),
-     line("inputs", io_lib:format("~b, each compared with the ~ts task's reference answer",
-                                  [Total, maps:get(task, C)])),
+     line("inputs", case maps:get(task, C) of
+                        Task when is_atom(Task) ->
+                            io_lib:format("~b, each compared with the ~ts task's reference answer",
+                                          [Total, Task]);
+                        Case ->
+                            io_lib:format("~b, each compared with the answer recorded in case ~ts",
+                                          [Total, Case])
+                    end),
      line("erlang_wasm", engine(Erl, Hash, Total)),
      line("wasmtime", engine(Wt, Hash, Total)),
      line("agree", io_lib:format("~b of ~b inputs give the same result in both engines",
@@ -135,8 +150,8 @@ engine(#{version := V, received_sha256 := Got, matches := M} = E, Hash, Total) -
 discrepancy(none) ->
     "none";
 discrepancy(#{input := X, reference := R, erlang_wasm := E, wasmtime := W}) ->
-    io_lib:format("input ~b: reference ~b, erlang_wasm ~ts, wasmtime ~ts",
-                  [X, R, outcome(E), outcome(W)]).
+    io_lib:format("input ~ts: reference ~b, erlang_wasm ~ts, wasmtime ~ts",
+                  [wb_report:input(X), R, outcome(E), outcome(W)]).
 
 -spec outcome(outcome()) -> iodata().
 outcome({ok, V}) -> integer_to_list(V);

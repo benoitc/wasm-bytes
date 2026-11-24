@@ -4,7 +4,7 @@
 %% Up to this many changed inputs are listed one per line.
 -define(LIST_CHANGES, 12).
 
--export([report/1, revision/2, base_refused/2, base_refused/3, outcome/1]).
+-export([report/1, revision/2, base_refused/2, base_refused/3, outcome/1, input/1]).
 
 %% Every stage the reply reached, then its verdict.
 -spec report(wb_check:report()) -> iodata().
@@ -84,6 +84,8 @@ wasm_error(E) ->
 
 profile(#{verdict := interface_mismatch, why := Violations}) ->
     [line("profile", wb_profile:format_violation(V)) || V <- Violations];
+profile(#{plan := #{export := Export, params := P, results := Rs, profile := open}, results := _}) ->
+    line("profile", ["exports ", Export, " : ", wb_profile:signature({P, Rs}), "; no imports"]);
 profile(#{task := Task, results := _}) ->
     #{export := Export, params := P, results := Rs} = wb_task:get(Task),
     line("profile", ["one function, exported as ", Export, " : ",
@@ -91,9 +93,13 @@ profile(#{task := Task, results := _}) ->
 profile(_) ->
     [].
 
-calls(#{task := Task, results := Results, failures := Failures, wrong := Wrong}) ->
-    #{fuel := Fuel, deadline_ms := Deadline} = wb_exec:limits(),
-    Total = length(wb_task:inputs(Task)),
+calls(#{task := Task, results := Results, failures := Failures, wrong := Wrong} = R) ->
+    #{fuel := Fuel, deadline_ms := Deadline} =
+        maps:merge(wb_exec:limits(), maps:get(limits, maps:get(plan, R, #{}), #{})),
+    Total = case R of
+                #{plan := #{inputs := N}} -> N;
+                _ -> length(wb_task:inputs(Task))
+            end,
     Matched = length(Results) - length(Failures) - length(Wrong),
     [line("calls", io_lib:format("~b inputs, each in a fresh instance; fuel ~b and a ~b ms "
                                  "deadline per call", [Total, Fuel, Deadline])),
@@ -109,7 +115,7 @@ calls(#{task := Task, results := Results, failures := Failures, wrong := Wrong})
          [_] -> [line("wrong", "1 answer differs from the reference"), wrong_groups(Wrong)];
          [{X1, W1, G1} | _] ->
              [line("wrong", io_lib:format("~b answers differ from the reference", [length(Wrong)])),
-              line("first", io_lib:format("input ~b: expected ~b, got ~b", [X1, W1, G1])),
+              line("first", io_lib:format("input ~ts: expected ~b, got ~b", [input(X1), W1, G1])),
               wrong_groups(Wrong)]
      end,
      line("answers", io_lib:format("~b of ~b match the reference", [Matched, Total]))];
@@ -140,13 +146,23 @@ grouped(Items) ->
     Keys = lists:usort([iolist_to_binary(K) || {_, K} <- Items]),
     Groups = [{K, lists:sort([X || {X, K1} <- Items, iolist_to_binary(K1) =:= K])} || K <- Keys],
     [case Xs of
-         [X] -> line("", [io_lib:format("input ~b: ", [X]), K]);
+         [X] -> line("", [io_lib:format("input ~ts: ", [input(X)]), K]);
          _ -> [line("", [K, io_lib:format(" on ~b inputs:", [length(Xs)])]),
                [line("", ["  ", L]) || L <- wrap(segments(Xs))]]
      end || {K, Xs} <- lists:sort(fun({_, [A | _]}, {_, [B | _]}) -> A =< B end, Groups)].
 
+%% An input as a reader writes it: `599', or `(2147483647, 1)' for a call
+%% with two arguments.
+-spec input(wb_exec:input()) -> iodata().
+input(Args) when is_list(Args) ->
+    ["(", lists:join(", ", [integer_to_list(A) || A <- Args]), ")"];
+input(X) ->
+    integer_to_list(X).
+
 segments([]) ->
     [];
+segments([Args | Rest]) when is_list(Args) ->
+    [input(Args) | segments(Rest)];
 segments([X | Rest]) ->
     {Run, Tail} = run(X, Rest),
     Last = lists:last([X | Run]),

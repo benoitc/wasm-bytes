@@ -6,7 +6,7 @@
 %% path.
 -module(wb_wasmtime).
 
--export([find/0, version/1, run/4, parse/2]).
+-export([find/0, version/1, run/4, run/5, parse/2]).
 
 -define(FUEL, "fuel=10000").
 -define(TIMEOUT, "timeout=1s").
@@ -39,15 +39,24 @@ version(Exe) ->
     end.
 
 %% `[{Input, {ok, Value} | {error, Why}}]', in the order of `Inputs'.
--spec run(file:filename(), file:filename(), binary(), [integer()]) ->
-          [{integer(), {ok, integer()} | {error, binary()}}].
+-spec run(file:filename(), file:filename(), binary(), [wb_exec:input()]) ->
+          [{wb_exec:input(), {ok, integer()} | {error, binary()}}].
 run(Exe, Wasm, Export, Inputs) ->
+    run(Exe, Wasm, Export, Inputs, #{}).
+
+%% `Limits' may raise the fuel and the deadline, as a case with long-running
+%% calls does; the default is the runner's 10,000 fuel and one second.
+-spec run(file:filename(), file:filename(), binary(), [wb_exec:input()], map()) ->
+          [{wb_exec:input(), {ok, integer()} | {error, binary()}}].
+run(Exe, Wasm, Export, Inputs, Limits) ->
+    put(wb_wasmtime_limits, Limits),
     Indexed = lists:enumerate(Inputs),
     Chunks = chunks(Indexed, ?PARALLEL),
     Parent = self(),
     Refs = [begin
                 Ref = make_ref(),
                 spawn_link(fun() ->
+                               put(wb_wasmtime_limits, Limits),
                                Parent ! {Ref, [{I, X, call(Exe, Wasm, Export, X)} || {I, X} <- Chunk]}
                            end),
                 Ref
@@ -59,12 +68,18 @@ chunks(List, N) ->
     [[E || {J, E} <- lists:enumerate(List), J rem N =:= K] || K <- lists:seq(0, N - 1)].
 
 call(Exe, Wasm, Export, X) ->
-    Args = ["run", "-W", ?FUEL, "-W", ?TIMEOUT, "--invoke", binary_to_list(Export),
-            Wasm, integer_to_list(X)],
+    Limits = case get(wb_wasmtime_limits) of undefined -> #{}; L -> L end,
+    Fuel = case Limits of #{fuel := F} -> "fuel=" ++ integer_to_list(F); _ -> ?FUEL end,
+    Timeout = case Limits of #{deadline_ms := D} -> "timeout=" ++ integer_to_list(D) ++ "ms"; _ -> ?TIMEOUT end,
+    Args = ["run", "-W", Fuel, "-W", Timeout, "--invoke", binary_to_list(Export),
+            Wasm | [integer_to_list(A) || A <- args(X)]],
     case exec(Exe, Args) of
         {timeout, _} -> {error, ~"no answer within 10 s; the process was abandoned"};
         {Status, Out} -> parse(Status, Out)
     end.
+
+args(Args) when is_list(Args) -> Args;
+args(X) -> [X].
 
 %% Wasmtime prints the result on its own line, and on stderr a warning that
 %% `--invoke' is experimental. An i32 result is read as signed, as erlang_wasm
