@@ -21,6 +21,7 @@ case_test_() ->
       {"each WasmBench case in the sample has an open license", fun wasmbench_licenses/0},
       {"each contest case maps its example test to a call", fun contest_mapping/0},
       {"the spec batch totals", fun spec_batch/0},
+      {"the full run's summary matches its saved verdicts", fun corpus_summary/0},
       {"the command line: cases, prompt case, check case, batch", fun cli/0}]}.
 
 root() ->
@@ -135,6 +136,27 @@ spec_batch() ->
     B = wb_case:batch(root(), cases(), "spec", ?LABEL),
     ?assertMatch(#{cases := 12, attempted := 12, passed := 12, missing := 0}, maps:get(read, B)),
     ?assertMatch(#{cases := 8, attempted := 8, valid := 8, passed := 8, missing := 0}, maps:get(write, B)).
+
+%% The questions of the full run are rebuilt from the pinned sources, so
+%% here only the saved verdicts are counted, against the summary.
+corpus_summary() ->
+    {ok, Terms} = file:consult(filename:join(root(), "trials/corpus/summary.config")),
+    Label = binary_to_list(proplists:get_value(label, Terms)),
+    Counts = proplists:get_value(counts, Terms),
+    Configs = filelib:wildcard("trials/corpus/*/*/*/" ++ Label ++ "/fixture.config", root()),
+    ?assertEqual(599, length(Configs)),
+    Seen = [begin
+                {ok, C} = file:consult(filename:join(root(), F)),
+                ["trials", "corpus", Track, Direction | _] = filename:split(F),
+                ?assert(filelib:is_regular(filename:join([root(), filename:dirname(F), "reply.txt"]))),
+                {iolist_to_binary([Track, "/", Direction]), proplists:get_value(expect, C)}
+            end || F <- Configs],
+    [begin
+         Mine = [V || {T, V} <- Seen, T =:= Key],
+         ?assertEqual({Key, proplists:get_value(questions, Want)}, {Key, length(Mine)}),
+         [?assertEqual({Key, V, N}, {Key, V, length([x || V1 <- Mine, V1 =:= V])})
+          || {V, N} <- Want, V =/= questions]
+     end || {Key, Want} <- Counts].
 
 cli() ->
     {0, List, _} = run(["cases", "spec"]),

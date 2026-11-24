@@ -130,7 +130,8 @@ command(["compare", "case", Id, Reply | Args]) ->
     end;
 command(["batch", Track, Label | Args]) ->
     {[], Opts} = options(Args),
-    io:put_chars(wb_case:batch_report(wb_case:batch(root(), cases_dir(Opts), Track, Label))),
+    Replies = maps:get("replies", Opts, filename:join([root(), "trials", "cases"])),
+    io:put_chars(wb_case:batch_report(wb_case:batch(Replies, cases_dir(Opts), Track, Label, []))),
     0;
 command(["prepare", Track | Args]) ->
     {[], Opts} = options(Args),
@@ -171,7 +172,7 @@ usage() ->
     "       bin/wasm-bytes prompt case ID [--cases DIRECTORY]\n"
     "       bin/wasm-bytes check case ID REPLY [--cases DIRECTORY]\n"
     "       bin/wasm-bytes compare case ID REPLY [--cases DIRECTORY]\n"
-    "       bin/wasm-bytes batch TRACK LABEL [--cases DIRECTORY]\n"
+    "       bin/wasm-bytes batch TRACK LABEL [--cases DIRECTORY] [--replies DIRECTORY]\n"
     "       bin/wasm-bytes prepare spec [--seed N] [--read N|all] [--write N|all] [--out DIRECTORY]\n"
     "       bin/wasm-bytes prepare wasmbench --from DIRECTORY [--seed N] [--sample N|all]\n"
     "                      [--licenses FILE] [--out DIRECTORY]\n"

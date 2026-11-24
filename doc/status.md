@@ -1,6 +1,70 @@
-# What the recorded trials showed
+# What we found
 
-This page gives the result of every recorded model trial, task by task, and what each result does and does not tell you. Read it before you rely on a verdict. Each result names what was tested: a pass covers the inputs the checker tried, on one attempt per model and prompt. Detailed tables and host details sit in collapsed sections under each result.
+This page says what the models did in every experiment so far. It starts with the findings and why they matter, then gives the details of each run. Every number below comes from replies saved in this repository, and you can replay it without a model account.
+
+## The findings
+
+<div class="findings">
+
+<div class="finding">
+<h3>A model can write a working program as raw bytes, with no compiler.</h3>
+<p class="evidence">528 of 528 · 1,353 of 1,353 · 641 of 641</p>
+<p>Claude Opus and Sonnet wrote complete WebAssembly files, byte by byte, for three small functions. Each gave the right answer on every input we tried. Nothing sat between the model and the machine: the bytes it typed are the bytes that ran.</p>
+<p class="refs"><a href="#a-small-function-retry">retry</a> · <a href="#a-slightly-larger-program-digit_sum">digit_sum</a> · <a href="#a-function-recovered-from-dx-ball">DX-Ball</a></p>
+</div>
+
+<div class="finding">
+<h3>It can change its own program by exactly one byte.</h3>
+<p class="evidence">1 byte changed, 640 answers changed, nothing else</p>
+<p>Asked to reverse the stereo of the DX-Ball sound, Sonnet flipped one byte, <code>3f</code> to <code>bf</code>, turning a scale of 1.0 into −1.0. Every answer that should change did, and no other did. That is a precise edit to a compiled file, made without recompiling anything.</p>
+<p class="refs"><a href="dx-ball.md">The DX-Ball story</a></p>
+</div>
+
+<div class="finding">
+<h3>It can read a compiled program and say what it returns.</h3>
+<p class="evidence">361 of 364 test-suite programs · 183 of 192 real files</p>
+<p>Shown only the bytes, with no names or source code, Sonnet predicted the result of a call almost every time, including on real files collected from the web. That matters wherever you have a binary but no source: old software, like the DX-Ball game, or code you want to understand before you run it.</p>
+<p class="refs"><a href="#reading-and-writing-tracks">Reading and writing</a></p>
+</div>
+
+<div class="finding">
+<h3>Most reading mistakes were about format, not understanding.</h3>
+<p class="evidence">8 of the 9 misses on real files were the right number</p>
+<p>The model put the answer in bold Markdown, like <code>**11**</code>, where a bare number was asked for. The checker counts that as wrong, just as it counts a correct program with a sentence around it as wrong. A program reading the reply needs the exact format.</p>
+<p class="refs"><a href="#reading-and-writing-tracks">The details</a></p>
+</div>
+
+<div class="finding">
+<h3>Faced with a hash, it chose not to guess.</h3>
+<p class="evidence">about 400,000 tokens of reasoning, then no answer</p>
+<p>For a hash function that loops 100 times, Sonnet tried to work out the result by hand, then said it couldn't give a trustworthy number without running the code. That one question cost about $4, nearly half the full run. Knowing when not to answer is useful, but it isn't free.</p>
+<p class="refs"><a href="#reading-and-writing-tracks">The details</a></p>
+</div>
+
+<div class="finding">
+<h3>Harder problems are where writing bytes breaks.</h3>
+<p class="evidence">30 of 31 single instructions · 7 of 12 contest problems</p>
+<p>Writing a program for one instruction almost always worked. Contest problems need loops and arithmetic, and there the model solved the easier ones and about a third of the hard ones. Some replies weren't valid files at all. In the sample, both such files declared a section one byte longer than it was: the classic mistake when writing a binary by hand.</p>
+<p class="refs"><a href="#reading-and-writing-tracks">The details</a></p>
+</div>
+
+<div class="finding">
+<h3>A smaller model can catch up with a little guidance.</h3>
+<p class="evidence">digit_sum: not a valid module without the guide, 1,353 of 1,353 with it</p>
+<p>A local model, Inkling 2 Mini, picked wrong instruction bytes on its own. Given a one-page reference of the bytes for each instruction, it wrote a correct program. On the demo page, one extra paragraph about iPhone audio took it from 12 to 13 of 13 browser checks.</p>
+<p class="refs"><a href="#a-guided-prompt-for-smaller-models">Guided prompts</a> · <a href="#a-demo-page-written-by-the-model">Demo pages</a></p>
+</div>
+
+<div class="finding">
+<h3>All of this is cheap to run and quick to check.</h3>
+<p class="evidence">599 questions · about 40 minutes · about $8.45</p>
+<p>The full reading and writing run cost about $8.45 at list prices. Building the questions takes seconds, and checking every test-suite reply takes under a second. Every reply is saved, so anyone can check the results again without asking a model.</p>
+<p class="refs"><a href="datasets.md#how-it-scales">How it scales</a></p>
+</div>
+
+</div>
+
+These findings come mostly from Claude models, with one attempt per question. They show what happened on these questions, not how often a model succeeds in general. The same task can come out differently on a second try: the bitwise AND program passed in the sample and failed in the full run.
 
 ## A small function: retry
 
@@ -126,29 +190,38 @@ All four pages follow the described look closely. The checks do not compare the 
 
 ## Reading and writing tracks
 
-On 24 November 2026, Claude Sonnet 5.5 answered a sample from three public sources, one attempt per case. It predicted every tested call correctly: 12 of 12 on the spec tests' one-instruction modules, and 8 of 8 on real WasmBench binaries. It wrote a module that passed every check for all 8 spec instructions it was asked for, and for 1 of the 5 contest problems. These numbers come from one model and one attempt per case, on small modules and a small sample. They say what happened on these cases, not how often a model succeeds. [How the cases are drawn and checked](datasets.md)
+On 24 November 2026, we asked Claude Sonnet 5.5 two new kinds of question, using public collections: read a WebAssembly file and say what a call returns, or write a working file from a description or a contest problem. Every right answer came from the collection itself. Sonnet answered a sample of 33 questions first, then all 599 usable ones, one attempt each. [What was asked, and how it scales](datasets.md)
 
-| Track | What was asked | Result |
+| Question | Sample | Full run |
 | --- | --- | --- |
-| Spec tests, reading | 12 calls to one-instruction modules built from `i32.wast` | 12 of 12 predictions correct |
-| Spec tests, writing | 8 instructions described in English, each checked on its 7 to 17 upstream assertions | 8 of 8 valid modules, 8 of 8 passed every check |
-| WasmBench, reading | 8 calls to real binaries of 74 to 751 bytes, from openly licensed projects | 8 of 8 predictions correct |
-| CodeContests, writing | 5 problems, each checked on its 58 to 248 private and generated tests | 3 of 5 valid modules, 1 of 5 passed every check |
+| Read a test-suite program and predict a call | 12 of 12 right | 361 of 364 right |
+| Write a program for one test-suite instruction | 8 of 8 passed | 30 of 31 passed |
+| Read a real file from WasmBench and predict a call | 8 of 8 right | 183 of 192 right |
+| Write a program for a contest problem | 1 of 5 passed | 7 of 12 passed |
 
-The contest problem Sonnet solved is the easiest of the five, "New Year Candles": a 48-byte module that passed all 104 graded calls. Two replies are not valid modules. In each, the code section declares one byte more than it holds: 86 bytes for 85, and 212 for 211. The other two modules are valid but did not finish within five seconds on a large input. Both are Codeforces problems of difficulty 11 and 12. [Trials](../trials/cases/)
+What the numbers mean:
 
-For the addition example, the reading case and the writing case are separate attempts. Sonnet's writing reply is the same 39 bytes as the module the reading prompt shows, although the writing prompt never showed it.
+- **Reading small programs is close to solved for this model.** The three misses on the test suite involve unusual bit patterns, such as `0xf0f0f0f0` combined through `and` and `xor`.
+- **On real files, format mattered as much as reasoning.** Eight of the nine misses were the right number, but in bold Markdown, and one of them came with an explanation. The checker accepts only a bare number, as it accepts only bare hex for a program. The ninth miss is a hash function: Sonnet reasoned for about 400,000 tokens, then said it couldn't answer without running the code.
+- **One attempt isn't the whole story.** The bitwise AND program passed in the sample and failed in the full run. The contest problem Rubik's Cube Coloring went the other way.
+- **Contest problems are the real test.** Sonnet solved every problem rated 7 to 9, and 2 of the 6 rated 10 to 12. One failure comes from the dataset, not the model: a generated test uses the input −27 for a problem whose limits are 1 to 32.
+
+These results describe one model, one attempt per question, and small files. They show what happened on these questions, not how often a model succeeds in general.
 
 <details>
-<summary>How each sample was drawn</summary>
+<summary>How each sample and the full run were drawn, and what they cost</summary>
 
-| Track | Source examined | Usable | Skipped, and why |
+| Source | Looked at | Usable | Skipped, and why |
 | --- | --- | --- | --- |
-| Spec tests | 374 assertions in `i32.wast` at testsuite `92a3d80` | 364 | 10 traps, which leave no value to predict |
-| WasmBench | 8,461 binaries in the v1.0 filtered release | 192 | 7,612 larger than 2,048 bytes; 540 with imports; 99 without an integer export; 17 with no call that returned; 1 that cannot be instantiated |
-| CodeContests | 624 problems in the valid, test, and first training files at revision `802411c` | 12 | 594 whose input is not one or two integers; 12 whose output is not one integer; 5 with a value beyond 32 bits; 1 with conflicting tests |
+| WebAssembly test suite | 374 tests in `i32.wast` at testsuite `92a3d80` | 364 reading, 31 writing | 10 tests expect the call to fail, so there is no number to predict |
+| WasmBench | 8,461 files in the v1.0 filtered release | 192 | 7,612 larger than 2,048 bytes; 540 that import functions; 99 without a function of up to two integers; 17 with no call that returned; 1 that cannot be instantiated |
+| CodeContests | 624 problems in the valid, test, and first training files at revision `802411c` | 12 | 594 whose input is not one or two integers; 12 whose output is not one integer; 5 with a value beyond 32 bits; 1 with tests that disagree |
 
-Each sample takes the usable items in the order of the SHA-256 of `"2026:<id>"`. The WasmBench sample takes only binaries from openly licensed projects. The spec sample always includes the addition example. Replay each total with `bin/wasm-bytes batch TRACK claude-sonnet-5-5-1`.
+Each sample takes the usable questions in the order of the SHA-256 of `"2026:<id>"`. The WasmBench sample only uses files from openly licensed projects, and the test-suite sample always includes the addition example. The full run used every usable question. Its replies are in `trials/corpus/`, and its questions are rebuilt from the pinned sources.
+
+The full run took about 40 minutes, with the three sources side by side. It used 621,920 input and 690,551 output tokens, about $8.45 at list prices, $4.02 of it for the hash function alone. One WasmBench question was asked twice where two workers met; its record says so. [Full run summary](../trials/corpus/summary.config)
+
+Replay any total with `bin/wasm-bytes batch TRACK LABEL`. The sample uses the label `claude-sonnet-5-5-1`. The full run uses `claude-sonnet-5-5-corpus-1`, with `--cases _build/cases --replies trials/corpus` after rebuilding its questions.
 
 </details>
 

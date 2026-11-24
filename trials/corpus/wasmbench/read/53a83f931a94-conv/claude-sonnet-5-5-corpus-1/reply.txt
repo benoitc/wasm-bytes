@@ -1,0 +1,10 @@
+**38**
+
+I did not run the module. I traced `conv` by hand from the hex.
+
+- `conv` is function 3, which has type `()->i32`. It returns `global4 >> 1`.
+- Its first loop only parses the pattern data into memory and never touches `global4`.
+- Its second loop walks the 38 alphabet entries (4 bytes each, from data offset 194 to 346). The count 38 (0x26) is stored at the start of that table.
+- Each pass of the second loop adds 2 to `global4`, so `global4` ends at 76 and `conv` returns 76 >> 1 = 38.
+
+This assumes the first loop terminates without trapping, which I did not simulate.

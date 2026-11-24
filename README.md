@@ -6,6 +6,15 @@ Can a language model write a program directly as WebAssembly bytes? In this expe
 
 The idea comes from George Xenos and Sotiris Giannopoulos’s experiment in writing native executables byte by byte. Using Wasm gives us a way to take one model reply and run it inside an Erlang application, in JavaScript, or in a standalone runtime such as Wasmtime. [Programming in the Machine Code Space](https://sgiannopoulos.github.io/blog/machine-code-programming/)
 
+## What we found
+
+- **A model can write a working program as raw bytes, with no compiler.** Claude wrote small WebAssembly files that gave the right answer on every input we tried, and changed one by exactly one byte when asked to reverse its sound.
+- **It can read a compiled program and say what it returns.** Shown only the bytes, Sonnet predicted the result for 361 of 364 test-suite programs and 183 of 192 real files from the web. Most of its misses were the right number in the wrong format.
+- **Harder problems are where it breaks.** It wrote a passing program for 30 of 31 single instructions, but for only 7 of 12 contest problems.
+- **It's cheap to run and quick to check.** 599 questions took about 40 minutes and cost about $8.45, and every saved reply can be checked again without a model account.
+
+[All the findings, and why they matter](doc/status.md)
+
 ## What would an application do with these bytes?
 
 Imagine a weather app asking a server for today’s forecast. If the server replies `429 Too Many Requests`, it makes sense to try again later. If it replies `404 Not Found`, asking for the same page again is unlikely to help. How does the app decide?
@@ -119,7 +128,16 @@ bin/wasm-bytes check case spec/write/add examples/cases/spec/write/add/subtracts
   verdict  wrong_answer
 ```
 
-**The batches.** Sonnet also answered a sample drawn from three public sources: the spec tests, real binaries from WasmBench, and CodeContests problems. Replay one track's totals:
+**From one question to 599.** Sonnet then answered questions from three public collections: the WebAssembly test suite, real files from WasmBench, and contest problems from CodeContests. It answered a sample of 33 first, kept here so you can replay it without a model account, then every usable question, 599 in all, one attempt each.
+
+| Question | Sample | Full run |
+| --- | --- | --- |
+| Read a test-suite program and predict a call | 12 of 12 right | 361 of 364 right |
+| Write a program for one test-suite instruction | 8 of 8 passed | 30 of 31 passed |
+| Read a real file from WasmBench and predict a call | 8 of 8 right | 183 of 192 right |
+| Write a program for a contest problem | 1 of 5 passed | 7 of 12 passed |
+
+Reading small programs went almost perfectly. On real files, most misses were the right number in bold Markdown, which the checker refuses, as it refuses anything but bare hex for a program. Contest problems are where the model struggles. Replay the sample's test-suite totals:
 
 ```sh
 bin/wasm-bytes batch spec claude-sonnet-5-5-1
@@ -136,7 +154,7 @@ bin/wasm-bytes batch spec claude-sonnet-5-5-1
            0 cases with no saved reply
 ```
 
-The other two tracks, how each sample was drawn from its pinned source, and how to run a larger corpus are in the guide. [Reading and writing tracks](doc/datasets.md) · [Results](doc/status.md#reading-and-writing-tracks)
+How the questions were chosen, how the run scales, and what the full run took and cost are in the guide. [Reading and writing WebAssembly](doc/datasets.md) · [Results](doc/status.md#reading-and-writing-tracks)
 
 ## A second function that does arithmetic
 

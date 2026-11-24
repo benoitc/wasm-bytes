@@ -1,0 +1,17 @@
+{
+  "claude_code_version": "2.1.331",
+  "is_error": false,
+  "mcp_servers": [],
+  "model": "claude-sonnet-5-5",
+  "num_turns": 1,
+  "result": "00 61 73 6d 01 00 00 00\n01 07 01 60 02 7f 7f 01 7f\n03 02 01 00\n07 05 01 01 66 00 00\n0a 09 01 07 00 20 00 20 01 47 0b",
+  "tools": [],
+  "usage": {
+    "cache_creation_input_tokens": 902,
+    "cache_read_input_tokens": 0,
+    "input_tokens": 2,
+    "output_tokens": 397,
+    "output_tokens_details": { "thinking_tokens": 312 }
+  }
+}
+
