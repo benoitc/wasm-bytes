@@ -1,6 +1,70 @@
-# What the recorded trials showed
+# What we found
 
-This page gives the result of every recorded model trial, task by task, and what each result does and does not tell you. Read it before you rely on a verdict. Each result names what was tested: a pass covers the inputs the checker tried, on one attempt per model and prompt. Detailed tables and host details sit in collapsed sections under each result.
+This page says what the models did in every experiment so far. It starts with the findings and why they matter, then gives the details of each run. Every number below comes from replies saved in this repository, and you can replay it without a model account.
+
+## The findings
+
+<div class="findings">
+
+<div class="finding">
+<h3>A model can write a working program as raw bytes, with no compiler.</h3>
+<p class="evidence">528 of 528 · 1,353 of 1,353 · 641 of 641</p>
+<p>Claude Opus and Sonnet wrote complete WebAssembly files, byte by byte, for three small functions. Each gave the right answer on every input we tried. Nothing sat between the model and the machine: the bytes it typed are the bytes that ran.</p>
+<p class="refs"><a href="#a-small-function-retry">retry</a> · <a href="#a-slightly-larger-program-digit_sum">digit_sum</a> · <a href="#a-function-recovered-from-dx-ball">DX-Ball</a></p>
+</div>
+
+<div class="finding">
+<h3>It can change its own program by exactly one byte.</h3>
+<p class="evidence">1 byte changed, 640 answers changed, nothing else</p>
+<p>Asked to reverse the stereo of the DX-Ball sound, Sonnet flipped one byte, <code>3f</code> to <code>bf</code>, turning a scale of 1.0 into −1.0. Every answer that should change did, and no other did. That is a precise edit to a compiled file, made without recompiling anything.</p>
+<p class="refs"><a href="dx-ball.md">The DX-Ball story</a></p>
+</div>
+
+<div class="finding">
+<h3>It can read a compiled program and say what it returns.</h3>
+<p class="evidence">361 of 364 test-suite programs · 183 of 192 real files</p>
+<p>Shown only the bytes, with no names or source code, Sonnet predicted the result of a call almost every time, including on real files collected from the web. That matters wherever you have a binary but no source: old software, like the DX-Ball game, or code you want to understand before you run it.</p>
+<p class="refs"><a href="#reading-and-writing-tracks">Reading and writing</a></p>
+</div>
+
+<div class="finding">
+<h3>Most reading mistakes were about format, not understanding.</h3>
+<p class="evidence">8 of the 9 misses on real files were the right number</p>
+<p>The model put the answer in bold Markdown, like <code>**11**</code>, where a bare number was asked for. The checker counts that as wrong, just as it counts a correct program with a sentence around it as wrong. A program reading the reply needs the exact format.</p>
+<p class="refs"><a href="#reading-and-writing-tracks">The details</a></p>
+</div>
+
+<div class="finding">
+<h3>Faced with a hash, it chose not to guess.</h3>
+<p class="evidence">about 400,000 tokens of reasoning, then no answer</p>
+<p>For a hash function that loops 100 times, Sonnet tried to work out the result by hand, then said it couldn't give a trustworthy number without running the code. That one question cost about $4, nearly half the full run. Knowing when not to answer is useful, but it isn't free.</p>
+<p class="refs"><a href="#reading-and-writing-tracks">The details</a></p>
+</div>
+
+<div class="finding">
+<h3>Harder problems are where writing bytes breaks.</h3>
+<p class="evidence">30 of 31 single instructions · 7 of 12 contest problems</p>
+<p>Writing a program for one instruction almost always worked. Contest problems need loops and arithmetic, and there the model solved the easier ones and about a third of the hard ones. Some replies weren't valid files at all. In the sample, both such files declared a section one byte longer than it was: the classic mistake when writing a binary by hand.</p>
+<p class="refs"><a href="#reading-and-writing-tracks">The details</a></p>
+</div>
+
+<div class="finding">
+<h3>A smaller model can catch up with a little guidance.</h3>
+<p class="evidence">digit_sum: not a valid module without the guide, 1,353 of 1,353 with it</p>
+<p>A local model, Inkling 2 Mini, picked wrong instruction bytes on its own. Given a one-page reference of the bytes for each instruction, it wrote a correct program. On the demo page, one extra paragraph about iPhone audio took it from 12 to 13 of 13 browser checks.</p>
+<p class="refs"><a href="#a-guided-prompt-for-smaller-models">Guided prompts</a> · <a href="#a-demo-page-written-by-the-model">Demo pages</a></p>
+</div>
+
+<div class="finding">
+<h3>All of this is cheap to run and quick to check.</h3>
+<p class="evidence">599 questions · about 40 minutes · about $8.45</p>
+<p>The full reading and writing run cost about $8.45 at list prices. Building the questions takes seconds, and checking every test-suite reply takes under a second. Every reply is saved, so anyone can check the results again without asking a model.</p>
+<p class="refs"><a href="datasets.md#how-it-scales">How it scales</a></p>
+</div>
+
+</div>
+
+These findings come mostly from Claude models, with one attempt per question. They show what happened on these questions, not how often a model succeeds in general. The same task can come out differently on a second try: the bitwise AND program passed in the sample and failed in the full run.
 
 ## A small function: retry
 

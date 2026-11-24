@@ -6,6 +6,15 @@ Can a language model write a program directly as WebAssembly bytes? In this expe
 
 The idea comes from George Xenos and Sotiris Giannopoulos’s experiment in writing native executables byte by byte. Using Wasm gives us a way to take one model reply and run it inside an Erlang application, in JavaScript, or in a standalone runtime such as Wasmtime. [Programming in the Machine Code Space](https://sgiannopoulos.github.io/blog/machine-code-programming/)
 
+## What we found
+
+- **A model can write a working program as raw bytes, with no compiler.** Claude wrote small WebAssembly files that gave the right answer on every input we tried, and changed one by exactly one byte when asked to reverse its sound.
+- **It can read a compiled program and say what it returns.** Shown only the bytes, Sonnet predicted the result for 361 of 364 test-suite programs and 183 of 192 real files from the web. Most of its misses were the right number in the wrong format.
+- **Harder problems are where it breaks.** It wrote a passing program for 30 of 31 single instructions, but for only 7 of 12 contest problems.
+- **It's cheap to run and quick to check.** 599 questions took about 40 minutes and cost about $8.45, and every saved reply can be checked again without a model account.
+
+[All the findings, and why they matter](doc/status.md)
+
 ## What would an application do with these bytes?
 
 Imagine a weather app asking a server for today’s forecast. If the server replies `429 Too Many Requests`, it makes sense to try again later. If it replies `404 Not Found`, asking for the same page again is unlikely to help. How does the app decide?
