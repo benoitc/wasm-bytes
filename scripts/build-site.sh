@@ -49,19 +49,50 @@ PROMPTS="$ROOT/_build/site-src/prompts"
 mkdir -p "$(dirname "$GALLERY")" "$PROMPTS" "$OUT/demo/ui"
 "$ROOT/bin/wasm-bytes" prompt ui > "$PROMPTS/ui.txt"
 "$ROOT/bin/wasm-bytes" prompt ui --guided > "$PROMPTS/ui.guided.txt"
+# The two modules every page loads: the replies pan-demo put in modules.js,
+# with the prompts that produced them.
+PAN_DIR=$(sed -n 's/.*"reply":"\(trials\/pan\/[^"]*\)\/reply.txt".*/\1/p' "$ROOT/_build/pan-demo/modules.js")
+REV_DIR=$(sed -n 's/.*"reply":"\(trials\/reverse\/[^"]*\)\/reply.txt".*/\1/p' "$ROOT/_build/pan-demo/modules.js")
+MOD_MODEL=$(sed -n 's/^{model, "\([^"]*\)"}\./\1/p' "$ROOT/$PAN_DIR/fixture.config" | sed 's/, digest .*//')
+MODULES_LINE="<p>Modules it loads: written by <code>$MOD_MODEL</code>, from the <a href=\"$REPO_URL/blob/main/$PAN_DIR/prompt.txt\">pan prompt</a> (<a href=\"$REPO_URL/blob/main/$PAN_DIR/reply.txt\">reply</a>) and the <a href=\"$REPO_URL/blob/main/$REV_DIR/prompt.txt\">reverse prompt</a> (<a href=\"$REPO_URL/blob/main/$REV_DIR/reply.txt\">reply</a>).</p>"
 cat > "$GALLERY" <<'INTRO'
 # Pages the models wrote
 
-Each page below is a model's whole reply, published as it came back. Each entry links the prompt the model received and gives the verdict of the browser checks. A page that passes uses the recorded `screen_pan` modules for every value it shows or plays, turns its sound on with one tap, asks for media playback so that an iPhone's silent switch should not mute it, and fits a phone screen. Open a page on its own to hear it on an iPhone. [How the pages are checked](../../doc/ui.html)
+Each page below is a model's whole reply to a page prompt, published as it came back. The page is the last of three prompts. It runs WebAssembly that a model wrote first, from two module prompts.
+
+<p><img src="../../doc/media/ui-flow.svg" alt="The flow: the pan prompt gives the Original module, the reverse prompt the Reversed one, pan-demo puts both in modules.js, then the ui prompt gives the page, which loads modules.js in your browser and pans each beep by screen_pan(x) / 500." style="width:100%;max-width:560px;display:block;margin:8px auto 16px"></p>
+
+1. **Module prompt.** The [pan prompt](@REPO@/blob/main/@PAN_DIR@/prompt.txt) asks a model for the bytes of a WebAssembly module whose `screen_pan(x)` follows DX-Ball's recovered rule. The runner checks the reply before anything uses it.
+2. **Reverse prompt.** The [reverse prompt](@REPO@/blob/main/@REV_DIR@/prompt.txt) gives the model its accepted module and asks for the same module with the stereo reversed. The runner checks that reply too.
+3. **Page prompt.** `bin/wasm-bytes pan-demo` puts the two accepted modules into `modules.js`, as base64. Then the [ui prompt](@REPO@/blob/main/prompts/ui.txt) asks a model for the page that loads `modules.js` and calls `screen_pan` on the module you select. The page prompt describes `modules.js`, but contains neither the module prompts nor the bytes.
+
+Every page here loads the same `modules.js`, with the two modules `@MOD_MODEL@` wrote in steps 1 and 2. So a page can be written by one model and run modules written by another. Each entry gives the verdict of the browser checks: a page that passes uses those modules for every value it shows or plays, turns its sound on with one tap, asks for media playback so that an iPhone's silent switch should not mute it, and fits a phone screen. Open a page on its own to hear it on an iPhone. [How the modules were made](../../doc/dx-ball.html) · [How the pages are checked](../../doc/ui.html)
+
+To run the three prompts yourself, from the repository folder:
+
+```sh
+# 1. Send pan-prompt.txt to a model, and save its whole reply as pan.txt.
+bin/wasm-bytes prompt pan > pan-prompt.txt
+bin/wasm-bytes check pan pan.txt
+# 2. Send reverse-prompt.txt, and save the reply as reversed.txt.
+bin/wasm-bytes prompt reverse --base pan.txt > reverse-prompt.txt
+bin/wasm-bytes check reverse reversed.txt --base pan.txt
+# 3. Send ui-prompt.txt, and save the reply as page.html.
+bin/wasm-bytes prompt ui > ui-prompt.txt
+bin/wasm-bytes check ui page.html --original pan.txt --reversed reversed.txt
+```
 
 INTRO
+sed -e "s|@REPO@|$REPO_URL|g" -e "s|@PAN_DIR@|$PAN_DIR|g" -e "s|@REV_DIR@|$REV_DIR|g" \
+    -e "s|@MOD_MODEL@|$MOD_MODEL|g" "$GALLERY" > "$GALLERY.tmp" && mv "$GALLERY.tmp" "$GALLERY"
 
 # Whether a trial received today's ui prompt, baseline or guided.
 current() {
     cmp -s "$1/prompt.txt" "$PROMPTS/ui.txt" || cmp -s "$1/prompt.txt" "$PROMPTS/ui.guided.txt"
 }
 
-# One entry: the page, its verdict, its links, and a sandboxed preview.
+# One entry: the modules it loads, the page, its verdict, its links, and a
+# sandboxed preview.
 gallery_entry() {
     dir=${1%/}
     label=$(basename "$dir")
@@ -86,7 +117,8 @@ gallery_entry() {
     cat >> "$GALLERY" <<PAGE
 ### $heading
 
-$note<p><a href="$label/index.html">Open the page</a> · <a href="$REPO_URL/blob/main/trials/ui/$label/prompt.txt">The prompt it received</a> · <a href="$REPO_URL/blob/main/trials/ui/$label/reply.txt">Its reply on GitHub</a> · <a href="$REPO_URL/blob/main/trials/ui/$label/fixture.config">Model, settings and verdict</a></p>
+$MODULES_LINE
+$note<p><a href="$label/index.html">Open the page</a> · <a href="$REPO_URL/blob/main/trials/ui/$label/prompt.txt">Its page prompt</a> · <a href="$REPO_URL/blob/main/trials/ui/$label/reply.txt">Its reply on GitHub</a> · <a href="$REPO_URL/blob/main/trials/ui/$label/fixture.config">Model, settings and verdict</a></p>
 <iframe src="$label/index.html" title="Demo page written by $heading" sandbox="allow-scripts" allow="autoplay" loading="lazy" style="width:100%;height:720px;border:1px solid var(--line);border-radius:8px"></iframe>
 
 PAGE
