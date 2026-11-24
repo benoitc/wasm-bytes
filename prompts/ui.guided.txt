@@ -57,11 +57,65 @@ automatically:
                       click handler. Then create or resume the audio
                       context. Browsers without that API should still start
                       the beeps normally. A second tap stops them.
-
   id="mode-original"  a button that selects the Original module
   id="mode-reversed"  a button that selects the Reversed module
   id="pause"          a button that pauses and resumes the ball
   id="reading"        the element that shows x and screen_pan(x)
+
+How the page looks
+
+Lay the page out as one column, at most 760 px wide, centred, with 16 px
+side margins. From top to bottom:
+
+- Colors. A light page by default, and a dark one when the system prefers
+  it (prefers-color-scheme: dark):
+
+                  light      dark
+    background    #f7f6f2    #161615
+    text          #1d1d1b    #ecebe6
+    muted text    #6b6a66    #a3a19a
+    panels        #ffffff    #20201e
+    lines         #d9d6ce    #3a3935
+    ball          #c2410c    #fb923c
+    accent        #1d4ed8    #93b4ff
+
+  Text uses the system font at 16 px, with a line height of 1.5.
+- A heading, then a short paragraph saying what to do: turn the sound on,
+  watch the ball move from left to right, and switch between Original and
+  Reversed to hear the beep move the other way.
+- One row of controls, which wraps on a narrow screen: the Sound button,
+  labelled "Sound: off" or "Sound: on"; then Original and Reversed, joined
+  as one segmented control; then Pause, labelled "Pause", or "Play" while
+  the ball is paused. Buttons have the panel color, a 1 px border in the
+  line color and 8 px rounded corners. In the segmented control, the
+  selected button is filled with the accent color, with its text in the
+  background color.
+- One line of muted text under the controls: use headphones to hear left
+  and right, since a phone's speakers barely separate them.
+- The stage: a panel 150 px tall and as wide as the column, with a 1 px
+  border and 10 px rounded corners. Small muted labels along its top read
+  "x = 0" at the left, "320" in the middle and "640" at the right. The ball
+  is a 22 px circle in the ball color, 62 px below the top of the stage.
+  Its centre is 16 px from the left side at x = 0 and 16 px from the right
+  side at x = 640, and in proportion in between. The reading sits under
+  the ball, on two centred lines in a monospace font:
+
+    x = 394
+    screen_pan(x) = 115
+
+  It follows the ball, but never goes past either side of the stage.
+- Under the stage, a meter: a bar 10 px tall with rounded ends, in the
+  line color. A marker 4 px wide and 18 px tall, in the accent color, sits
+  at 50% + 50% * v / 500 of the bar's width, where v is the value in the
+  reading: at the left end for -500, the middle for 0, the right end for
+  500. Under the bar, three small muted labels: "left" at the left, "stereo
+  position sent to the speakers" in the middle, and "right" at the right.
+- Last, a section that starts collapsed, titled "Inspect the two files
+  this page loaded". It holds a table with one row per module: its label;
+  its model and reply from modules.js; and the SHA-256 recorded in
+  modules.js. Where the browser allows it, compute the SHA-256 of the bytes
+  the page loaded, and say whether it matches the recorded one. Let long
+  values wrap, so that nothing scrolls sideways on a phone.
 
 Requirements
 

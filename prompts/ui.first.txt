@@ -1,0 +1,67 @@
+Write a complete web page, as one HTML file, that demonstrates a sound
+effect recovered from the game DX-Ball (1996).
+
+A ball moves across the screen and a short beep follows it from left to
+right. A WebAssembly function decides where each beep sounds. The page is
+given two versions of that function: "Original" places the sound on the
+ball's side, and "Reversed" places it on the opposite side. The person
+using the page switches between them and hears the difference.
+
+What the page receives
+
+A script named modules.js, in the same folder as the page, defines:
+
+  window.PAN_MODULES = {
+    original: { label: "Original", model: "...", reply: "...", sha256: "...", bytes: "..." },
+    reversed: { label: "Reversed", model: "...", reply: "...", sha256: "...", bytes: "..." }
+  };
+
+Each "bytes" field is a complete WebAssembly module, encoded in base64.
+Each module exports one function, screen_pan(x). It takes an integer x
+from 0 at the left edge through 640 at the right edge, and returns an
+integer from -500 to 500. Load the script with
+<script src="modules.js"></script>, instantiate both modules with the
+WebAssembly JavaScript API, and call screen_pan on the selected one.
+
+What the page does
+
+- A ball moves across a horizontal track from left to right, again and
+  again. Its position is an integer x from 0 through 640.
+- While the sound is on, the page plays a short beep every 200 ms. The
+  pan of each beep comes from the value v that screen_pan(x) returns for
+  the ball's position at that moment. Use the Web Audio API and a
+  StereoPannerNode whose pan is v / 500, so that -500 is fully left and
+  500 fully right.
+- Every beep is the same in both modes: same pitch, same volume, same
+  length. Switching modes changes nothing but which module's screen_pan
+  the page calls.
+- Beside the ball, the page shows the current x and the value
+  screen_pan(x) returned, so that someone with the sound off can follow.
+  When the ball is paused and the person switches modes, the shown value
+  is the selected module's value for that x.
+- The page never computes the pan itself. Every value it shows or plays
+  comes from calling screen_pan on the selected module.
+
+Controls
+
+Use these exact element ids, so that the page can be tested
+automatically:
+
+  id="sound"          a button: one tap or click turns the sound on, the
+                      next one turns it off
+  id="mode-original"  a button that selects the Original module
+  id="mode-reversed"  a button that selects the Reversed module
+  id="pause"          a button that pauses and resumes the ball
+  id="reading"        the element that shows x and screen_pan(x)
+
+Requirements
+
+- It works in current desktop browsers and in Safari on an iPhone,
+  including when the iPhone's silent switch is on.
+- It makes no network requests and uses no libraries. All HTML, CSS and
+  JavaScript are in this one file, apart from modules.js.
+- It is readable on a phone, without scrolling sideways.
+
+Reply with only the HTML document, starting with <!doctype html>. Do not
+add any explanation or code fence: the reply is saved as index.html and
+opened as it is.

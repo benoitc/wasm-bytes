@@ -28,7 +28,7 @@ For results across models and the limits of these samples, see the [project stat
 
 For the larger `digit_sum` task, follow the same steps with `digits` in place of `write`: `bin/wasm-bytes prompt digits` for the prompt, `trials/digits/<label>/` for the files, and `bin/wasm-bytes check digits` for the verdict.
 
-A `ui` trial is a whole HTML page, not hex. Its prompt comes from `bin/wasm-bytes prompt ui`, and `bin/wasm-bytes check ui trials/ui/<label>/reply.txt` checks it in Chrome. The check needs Node and Chrome. [Browser checks](../doc/ui.md)
+A `ui` trial is a whole HTML page, not hex. Its prompt comes from `bin/wasm-bytes prompt ui`, and `bin/wasm-bytes check ui trials/ui/<label>/reply.txt` checks it in Chrome. The check needs Node and Chrome. The `ui` prompt has changed once, to describe how the page looks. Each trial's `prompt.txt` holds the version it received, and the site groups the pages by it. The first version is kept as `prompts/ui.first.txt`, with its guided form beside it, and the trials that received it name it with `{prompt_file, "prompts/ui.first.txt"}.` in `fixture.config`. [Browser checks](../doc/ui.md)
 
 The DX-Ball pair works the same way. Use `pan` for the first prompt, then `reverse` with `{base, "pan/<label>"}.` for the second. The second prompt comes from `bin/wasm-bytes prompt reverse --base trials/pan/<label>/reply.txt`.
 

@@ -190,8 +190,14 @@ trial_prompts() ->
                                                        maps:get(prompt_variant, C, baseline)),
              ?assertEqual({Label, iolist_to_binary(Rendered)}, {Label, Prompt});
          #{task := Task, prompt := Prompt, config := C} ->
-             %% A one-prompt task: the prompt file for its variant, as it is.
-             {ok, File} = wb_task:prompt(Task, maps:get(prompt_variant, C, baseline)),
+             %% A one-prompt task: the prompt file for its variant, as it is,
+             %% or the earlier version of it that the trial names.
+             File = case C of
+                        #{prompt_file := Earlier} -> Earlier;
+                        _ ->
+                            {ok, Current} = wb_task:prompt(Task, maps:get(prompt_variant, C, baseline)),
+                            Current
+                    end,
              {ok, Want} = file:read_file(filename:join(root(), File)),
              ?assertEqual({Task, Label, Want}, {Task, Label, Prompt})
      end || #{label := Label} = F <- Trials].

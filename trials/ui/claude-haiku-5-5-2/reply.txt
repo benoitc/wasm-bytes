@@ -1,0 +1,476 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DX-Ball: where the beep goes</title>
+<style>
+  :root {
+    --bg: #f7f6f2;
+    --text: #1d1d1b;
+    --muted: #6b6a66;
+    --panel: #ffffff;
+    --line: #d9d6ce;
+    --ball: #c2410c;
+    --accent: #1d4ed8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #161615;
+      --text: #ecebe6;
+      --muted: #a3a19a;
+      --panel: #20201e;
+      --line: #3a3935;
+      --ball: #fb923c;
+      --accent: #93b4ff;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+  .wrap {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 24px 16px 40px;
+  }
+  h1 {
+    font-size: 1.5rem;
+    line-height: 1.3;
+    margin: 0 0 12px;
+  }
+  p { margin: 0 0 14px; }
+  .muted { color: var(--muted); }
+  .small { font-size: 13px; line-height: 1.4; }
+
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 10px;
+  }
+  .btn, .seg button {
+    font: inherit;
+    color: var(--text);
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 14px;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .btn:focus-visible, .seg button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .seg {
+    display: inline-flex;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--panel);
+  }
+  .seg button {
+    border: 0;
+    border-radius: 0;
+  }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button[aria-pressed="true"] {
+    background: var(--accent);
+    color: var(--bg);
+  }
+
+  .stage {
+    position: relative;
+    width: 100%;
+    height: 150px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    overflow: hidden;
+    margin-top: 14px;
+  }
+  .lab {
+    position: absolute;
+    top: 10px;
+    font-size: 12px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .lab.l { left: 10px; }
+  .lab.c { left: 50%; transform: translateX(-50%); }
+  .lab.r { right: 10px; }
+  .ball {
+    position: absolute;
+    top: 62px;
+    left: 0;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--ball);
+  }
+  .reading {
+    position: absolute;
+    top: 90px;
+    left: 0;
+    transform: translateX(-50%);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 13px;
+    line-height: 1.4;
+    text-align: center;
+    white-space: pre-line;
+    pointer-events: none;
+  }
+
+  .meter { margin-top: 14px; }
+  .bar {
+    position: relative;
+    height: 10px;
+    border-radius: 999px;
+    background: var(--line);
+  }
+  .marker {
+    position: absolute;
+    top: -4px;
+    left: 50%;
+    width: 4px;
+    height: 18px;
+    border-radius: 2px;
+    background: var(--accent);
+    transform: translateX(-50%);
+  }
+  .meter-labels {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .meter-labels span:nth-child(2) {
+    flex: 1;
+    text-align: center;
+  }
+  .meter-labels span:last-child { text-align: right; }
+
+  .inspect {
+    margin-top: 24px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 10px 14px;
+  }
+  .inspect summary {
+    cursor: pointer;
+    font-weight: 600;
+    padding: 4px 0;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    font-size: 13px;
+    margin-top: 8px;
+  }
+  th, td {
+    text-align: left;
+    vertical-align: top;
+    padding: 8px 6px;
+    border-top: 1px solid var(--line);
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+  th {
+    color: var(--muted);
+    font-weight: 600;
+  }
+  .hash {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px;
+    overflow-wrap: anywhere;
+    word-break: break-all;
+  }
+  .model { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <h1>DX-Ball: where the beep goes</h1>
+  <p>Turn the sound on and watch the ball move from left to right. Switch between Original and Reversed to hear the beep move the other way.</p>
+
+  <div class="controls">
+    <button id="sound" class="btn" type="button">Sound: off</button>
+    <div class="seg" role="group" aria-label="Module">
+      <button id="mode-original" type="button" aria-pressed="true">Original</button>
+      <button id="mode-reversed" type="button" aria-pressed="false">Reversed</button>
+    </div>
+    <button id="pause" class="btn" type="button">Pause</button>
+  </div>
+  <p class="muted small">Use headphones to hear left and right, since a phone's speakers barely separate them.</p>
+
+  <div id="stage" class="stage">
+    <span class="lab l">x = 0</span>
+    <span class="lab c">320</span>
+    <span class="lab r">640</span>
+    <div id="ball" class="ball"></div>
+    <div id="reading" class="reading"></div>
+  </div>
+
+  <div class="meter">
+    <div class="bar"><div id="marker" class="marker"></div></div>
+    <div class="meter-labels">
+      <span>left</span>
+      <span>stereo position sent to the speakers</span>
+      <span>right</span>
+    </div>
+  </div>
+
+  <details class="inspect">
+    <summary>Inspect the two files this page loaded</summary>
+    <table>
+      <thead>
+        <tr>
+          <th style="width:18%">Module</th>
+          <th style="width:30%">Model and reply</th>
+          <th style="width:26%">SHA-256 recorded</th>
+          <th style="width:26%">SHA-256 of loaded bytes</th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </details>
+</main>
+
+<script src="modules.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  const $ = (id) => document.getElementById(id);
+  const soundBtn = $('sound');
+  const origBtn = $('mode-original');
+  const revBtn = $('mode-reversed');
+  const pauseBtn = $('pause');
+  const reading = $('reading');
+  const ball = $('ball');
+  const stage = $('stage');
+  const marker = $('marker');
+  const rowsEl = $('rows');
+
+  const SPEED = 120;      // stage pixels per second
+  const BEEP_EVERY = 200; // ms
+
+  const mods = {};        // key -> { bytes, fn }
+  let ready = false;
+  let mode = 'original';
+  let pos = 0;            // float position, 0..640
+  let x = 0;              // integer position, 0..640
+  let v = 0;              // last value returned by screen_pan
+  let paused = false;
+  let last = performance.now();
+
+  let ac = null;
+  let soundOn = false;
+  let timer = null;
+
+  function pan(xVal) {
+    return Number(mods[mode].fn(xVal));
+  }
+
+  function setMode(m) {
+    mode = m;
+    origBtn.setAttribute('aria-pressed', String(m === 'original'));
+    revBtn.setAttribute('aria-pressed', String(m === 'reversed'));
+    if (ready) v = pan(x);
+  }
+  origBtn.addEventListener('click', () => setMode('original'));
+  revBtn.addEventListener('click', () => setMode('reversed'));
+
+  pauseBtn.addEventListener('click', () => {
+    paused = !paused;
+    pauseBtn.textContent = paused ? 'Play' : 'Pause';
+  });
+
+  soundBtn.addEventListener('click', () => {
+    if (!soundOn) {
+      if (!ac) {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if (!Ctx) {
+          reading.textContent = 'Web Audio is not available in this browser.';
+          return;
+        }
+        ac = new Ctx();
+      }
+      // Let playback sound even when the iPhone silent switch is on (Safari 16.4+).
+      try {
+        if (navigator.audioSession) navigator.audioSession.type = 'playback';
+      } catch (e) { /* ignore */ }
+      if (ac.state !== 'running') ac.resume();
+      soundOn = true;
+      soundBtn.textContent = 'Sound: on';
+      beep();
+      timer = setInterval(beep, BEEP_EVERY);
+    } else {
+      soundOn = false;
+      clearInterval(timer);
+      timer = null;
+      soundBtn.textContent = 'Sound: off';
+    }
+  });
+
+  function beep() {
+    if (!ac || !ready) return;
+    const t = ac.currentTime;
+    const osc = ac.createOscillator();
+    const gain = ac.createGain();
+    const panner = ac.createStereoPanner();
+    osc.type = 'sine';
+    osc.frequency.value = 880;
+    gain.gain.setValueAtTime(0, t);
+    gain.gain.linearRampToValueAtTime(0.25, t + 0.005);
+    gain.gain.setValueAtTime(0.25, t + 0.055);
+    gain.gain.linearRampToValueAtTime(0, t + 0.07);
+    panner.pan.value = pan(x) / 500;
+    osc.connect(gain);
+    gain.connect(panner);
+    panner.connect(ac.destination);
+    osc.start(t);
+    osc.stop(t + 0.08);
+  }
+
+  function render() {
+    const W = stage.clientWidth;
+    const center = 16 + (x / 640) * (W - 32);
+    ball.style.left = (center - 11) + 'px';
+
+    reading.textContent = 'x = ' + x + '\nscreen_pan(x) = ' + v;
+    const half = reading.offsetWidth / 2;
+    const clamped = Math.min(Math.max(center, half + 4), W - half - 4);
+    reading.style.left = clamped + 'px';
+
+    marker.style.left = (50 + v / 10) + '%';
+  }
+
+  function frame(now) {
+    const dt = Math.min(0.1, (now - last) / 1000);
+    last = now;
+    if (!paused) pos = (pos + dt * SPEED) % 640;
+    x = Math.round(pos);
+    if (ready) v = pan(x);
+    render();
+    requestAnimationFrame(frame);
+  }
+
+  async function loadModule(key) {
+    const info = window.PAN_MODULES[key];
+    const bin = atob(info.bytes);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const result = await WebAssembly.instantiate(bytes, {});
+    const fn = result.instance.exports.screen_pan;
+    if (typeof fn !== 'function') throw new Error(key + ' does not export screen_pan');
+    return { bytes, fn };
+  }
+
+  function hex(buf) {
+    return Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  function buildRows() {
+    const cells = {};
+    for (const key of ['original', 'reversed']) {
+      const info = window.PAN_MODULES[key];
+      const tr = document.createElement('tr');
+
+      const tdLabel = document.createElement('td');
+      tdLabel.textContent = info.label;
+
+      const tdModel = document.createElement('td');
+      const model = document.createElement('div');
+      model.className = 'model';
+      model.textContent = info.model;
+      const reply = document.createElement('div');
+      reply.className = 'muted small';
+      reply.textContent = info.reply;
+      tdModel.append(model, reply);
+
+      const tdRecorded = document.createElement('td');
+      const rec = document.createElement('div');
+      rec.className = 'hash';
+      rec.textContent = info.sha256;
+      tdRecorded.appendChild(rec);
+
+      const tdLoaded = document.createElement('td');
+      tdLoaded.textContent = 'Computing...';
+      cells[key] = tdLoaded;
+
+      tr.append(tdLabel, tdModel, tdRecorded, tdLoaded);
+      rowsEl.appendChild(tr);
+    }
+    return cells;
+  }
+
+  async function fillHashCell(key, cell) {
+    const recorded = String(window.PAN_MODULES[key].sha256 || '').trim().toLowerCase();
+    const m = mods[key];
+    if (!m) {
+      cell.textContent = 'Not loaded.';
+      return;
+    }
+    if (!(window.crypto && window.crypto.subtle)) {
+      cell.textContent = 'Not computed: SHA-256 is not available in this browser context.';
+      return;
+    }
+    try {
+      const h = hex(await window.crypto.subtle.digest('SHA-256', m.bytes));
+      const ok = h === recorded;
+      cell.textContent = '';
+      const code = document.createElement('div');
+      code.className = 'hash';
+      code.textContent = h;
+      const note = document.createElement('div');
+      note.className = 'muted small';
+      note.textContent = ok
+        ? 'Matches the recorded SHA-256.'
+        : 'Does not match the recorded SHA-256.';
+      cell.append(code, note);
+    } catch (e) {
+      cell.textContent = 'Not computed: ' + e.message;
+    }
+  }
+
+  async function init() {
+    if (!window.PAN_MODULES) {
+      reading.textContent = 'modules.js did not load.';
+      requestAnimationFrame(frame);
+      return;
+    }
+    const cells = buildRows();
+    try {
+      for (const key of ['original', 'reversed']) {
+        mods[key] = await loadModule(key);
+      }
+    } catch (e) {
+      reading.textContent = 'Could not load the modules: ' + e.message;
+      requestAnimationFrame(frame);
+      return;
+    }
+    ready = true;
+    v = pan(x);
+    setMode(mode);
+    for (const key of ['original', 'reversed']) {
+      fillHashCell(key, cells[key]);
+    }
+    requestAnimationFrame(frame);
+  }
+
+  window.addEventListener('resize', render);
+  init();
+})();
+</script>
+</body>
+</html>
