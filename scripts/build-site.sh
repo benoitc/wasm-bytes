@@ -18,6 +18,7 @@ render() {
     title=$(sed -n 's/^# //p' "$ROOT/$src" | head -1)
     pandoc --from gfm --to html5 --standalone \
         --template "$ROOT/site/template.html" --lua-filter "$ROOT/site/links.lua" \
+        --lua-filter "$ROOT/site/anchors.lua" \
         --metadata source="$src" --metadata repo="$REPO_URL" \
         --metadata pagetitle="$title" --variable root="$root" \
         --output "$OUT/$dest" "$ROOT/$src"
@@ -31,7 +32,9 @@ done
 render trials/README.md trials/README.html "../"
 
 cp -R "$ROOT/doc/media" "$OUT/doc/media"
-cp "$ROOT/site/style.css" "$OUT/style.css"
+# The stylesheet, and the font, its license and the logo it uses.
+cp "$ROOT/site/style.css" "$ROOT/site/archivo-latin.woff2" "$ROOT/site/archivo-OFL.txt" \
+    "$ROOT/site/enki-logo.svg" "$OUT/"
 
 # The demo page, with the modules checked again and embedded.
 "$ROOT/bin/wasm-bytes" pan-demo --no-open >/dev/null
@@ -115,11 +118,15 @@ gallery_entry() {
     cp "$dir/reply.txt" "$OUT/demo/ui/$label/index.html"
     cp "$ROOT/_build/pan-demo/modules.js" "$OUT/demo/ui/$label/modules.js"
     cat >> "$GALLERY" <<PAGE
-### $heading
+<div class="entry">
+
+### $heading {#$label}
 
 $MODULES_LINE
 $note<p><a href="$label/index.html">Open the page</a> · <a href="$REPO_URL/blob/main/trials/ui/$label/prompt.txt">Its page prompt</a> · <a href="$REPO_URL/blob/main/trials/ui/$label/reply.txt">Its reply on GitHub</a> · <a href="$REPO_URL/blob/main/trials/ui/$label/fixture.config">Model, settings and verdict</a></p>
-<iframe src="$label/index.html" title="Demo page written by $heading" sandbox="allow-scripts" allow="autoplay" loading="lazy" style="width:100%;height:720px;border:1px solid var(--line);border-radius:8px"></iframe>
+<iframe class="preview" src="$label/index.html" title="Demo page written by $heading" sandbox="allow-scripts" allow="autoplay" loading="lazy"></iframe>
+
+</div>
 
 PAGE
 }
@@ -142,8 +149,8 @@ gallery_section current "Today's prompt" \
     "These pages answered the [ui prompt]($REPO_URL/blob/main/prompts/ui.txt) as it is now. It describes how the page looks as well as what it does, after the hand-written [demo](../pan/)."
 gallery_section earlier "The first prompt" \
     "These pages answered the [first version of the prompt]($REPO_URL/blob/main/prompts/ui.first.txt), which said what the page does but not how it looks."
-pandoc --from gfm --to html5 --standalone \
-    --template "$ROOT/site/template.html" \
+pandoc --from gfm+attributes --to html5 --standalone \
+    --template "$ROOT/site/template.html" --lua-filter "$ROOT/site/anchors.lua" \
     --metadata source="prompts/ui.txt" --metadata repo="$REPO_URL" \
     --metadata pagetitle="Pages the models wrote" --variable root="../../" \
     --output "$OUT/demo/ui/index.html" "$GALLERY"

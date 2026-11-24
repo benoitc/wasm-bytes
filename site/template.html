@@ -4,26 +4,34 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>$pagetitle$ · wasm-bytes</title>
+<link rel="icon" type="image/svg+xml" href="${root}enki-logo.svg">
+<link rel="preload" href="${root}archivo-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="${root}style.css">
 </head>
 <body>
-<header>
-  <nav aria-label="Site">
-    <a class="home" href="${root}index.html">wasm-bytes</a>
+<a class="skip" href="#content">Skip to content</a>
+<header class="site-head">
+<div class="wrap head-row">
+  <a class="name" href="${root}index.html">wasm<span>-</span>bytes</a>
+  <nav class="head-nav" aria-label="Site">
     <a href="${root}doc/evidence.html">Evidence</a>
     <a href="${root}doc/status.html">Results</a>
     <a href="${root}doc/dx-ball.html">DX-Ball</a>
     <a href="${root}doc/runner.html">Checks</a>
-    <a class="demo" href="${root}demo/pan/index.html">Hear the demo</a>
     <a href="${root}demo/ui/index.html">Pages the models wrote</a>
     <a href="$repo$">GitHub</a>
+    <a class="demo" href="${root}demo/pan/index.html">Hear the demo</a>
   </nav>
+</div>
 </header>
-<main>
+<main id="content" class="wrap">
 $body$
 </main>
-<footer>
-  Built from <a href="$repo$/blob/main/$source$">$source$</a>. Apache License 2.0. Made by <a href="https://enki-multimedia.eu">Enki Multimedia</a>.
+<footer class="site-foot">
+<div class="wrap">
+  <p class="attrib"><img src="${root}enki-logo.svg" alt="" width="26" height="26"><span>Made by <a href="https://enki-multimedia.eu/">Enki Multimedia</a>.</span></p>
+  <p>Built from <a href="$repo$/blob/main/$source$">$source$</a>. Code: <a href="$repo$/blob/main/LICENSE">Apache License 2.0</a>. Font: Archivo, <a href="${root}archivo-OFL.txt">SIL Open Font License</a>.</p>
+</div>
 </footer>
 </body>
 </html>
