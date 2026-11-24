@@ -1,0 +1,15 @@
+Write a complete WebAssembly module that exports f(i32, i32) -> i32. It shifts its first argument right by its second argument taken modulo 32, copying the sign bit into the bits it vacates. Reply with the complete file as hex.
+
+The module must not import anything. You write every byte: the magic number
+and version, every section id, every section length, every function body
+length, every local declaration and every instruction. Nothing will be added
+to your bytes and no length will be corrected: the bytes you send are the
+bytes that run.
+
+Reply with only the bytes, as pairs of hexadecimal digits, for example:
+
+0f a0 7c
+
+Whitespace and line breaks between pairs are allowed. Do not split a pair.
+Do not add anything else: no explanation, no code fence, no 0x prefix, no
+comments.

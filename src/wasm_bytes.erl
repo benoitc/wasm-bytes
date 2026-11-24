@@ -8,7 +8,14 @@
 %%   check revise REPLY --base REPLY    check a task 2 reply against its base
 %%   prompt write|digits [--guided]     print a one-prompt task's prompt
 %%   prompt revise --base REPLY         print the task 2 prompt for a base
+%%   cases [TRACK]                      list the cases of the reading and writing tracks
+%%   prompt case ID                     print a case's exact prompt
+%%   check case ID REPLY                check a reply to a case
+%%   compare case ID REPLY              run a write case's reply in both engines
+%%   batch TRACK LABEL                  summarize the replies saved under LABEL
+%%   prepare TRACK [OPTIONS]            build a track's cases from its pinned source
 %%
+%% The case commands read `cases/', or the directory `--cases DIR' names.
 %% REPLY is a file, or `-' for standard input.
 -module(wasm_bytes).
 
@@ -95,6 +102,39 @@ command(["prompt", Task, "--guided", "--base", Base]) when ?REVISION(Task) ->
     revision_prompt(Task, Base, guided);
 command(["pan-demo" | Opts]) ->
     pan_demo(Opts);
+command(["cases" | Args]) ->
+    {Pos, Opts} = options(Args),
+    Cases = case Pos of
+                [] -> wb_case:all(cases_dir(Opts));
+                [Track] -> wb_case:all(cases_dir(Opts), Track);
+                _ -> throw({usage, "wasm-bytes: cases takes at most one track"})
+            end,
+    io:put_chars([case_line(C) || C <- Cases]),
+    io:format("~b case~s~n", [length(Cases), case length(Cases) of 1 -> ""; _ -> "s" end]),
+    0;
+command(["prompt", "case", Id | Args]) ->
+    {[], Opts} = options(Args),
+    io:put_chars(wb_case:prompt(root(), find_case(Id, Opts))),
+    0;
+command(["check", "case", Id, Reply | Args]) ->
+    {[], Opts} = options(Args),
+    R = wb_case:check(find_case(Id, Opts), input(Reply)),
+    io:put_chars(wb_case:report(R)),
+    exit_code(R);
+command(["compare", "case", Id, Reply | Args]) ->
+    {[], Opts} = options(Args),
+    case find_case(Id, Opts) of
+        #{direction := write} = C -> compare_plan(wb_case:plan(C), Reply);
+        #{direction := read} -> throw({usage, "wasm-bytes: compare runs a write case's module; "
+                                              "a read case's reply is a number"})
+    end;
+command(["batch", Track, Label | Args]) ->
+    {[], Opts} = options(Args),
+    io:put_chars(wb_case:batch_report(wb_case:batch(root(), cases_dir(Opts), Track, Label))),
+    0;
+command(["prepare", Track | Args]) ->
+    {[], Opts} = options(Args),
+    prepare(Track, Opts);
 command(["help"]) ->
     io:put_chars(usage()),
     0;
@@ -127,7 +167,17 @@ usage() ->
     "       bin/wasm-bytes prompt write|digits|pan|ui [--guided]\n"
     "       bin/wasm-bytes prompt revise|reverse --base REPLY [--guided]\n"
     "       bin/wasm-bytes pan-demo [--original REPLY --reversed REPLY] [--no-open]\n"
+    "       bin/wasm-bytes cases [TRACK] [--cases DIRECTORY]\n"
+    "       bin/wasm-bytes prompt case ID [--cases DIRECTORY]\n"
+    "       bin/wasm-bytes check case ID REPLY [--cases DIRECTORY]\n"
+    "       bin/wasm-bytes compare case ID REPLY [--cases DIRECTORY]\n"
+    "       bin/wasm-bytes batch TRACK LABEL [--cases DIRECTORY]\n"
+    "       bin/wasm-bytes prepare spec [--seed N] [--read N|all] [--write N|all] [--out DIRECTORY]\n"
+    "       bin/wasm-bytes prepare wasmbench --from DIRECTORY [--seed N] [--sample N|all]\n"
+    "                      [--licenses FILE] [--out DIRECTORY]\n"
+    "       bin/wasm-bytes prepare codecontests --from FILE [--seed N] [--sample N|all] [--out DIRECTORY]\n"
     "TASK is write, revise, digits, pan or reverse.\n"
+    "TRACK is spec, wasmbench or codecontests; a case ID is TRACK/read/NAME or TRACK/write/NAME.\n"
     "REPLY is a file holding a model's reply, or - for standard input.\n".
 
 check_revise(Task, Reply, Base) ->
@@ -232,6 +282,121 @@ compare(Task, Reply, RecordDir) ->
         {error, {malformed_hex, Why}} ->
             throw({fail, io_lib:format("the reply is not hex: ~0p", [Why])})
     end.
+
+%% `--name value' pairs after the positional arguments.
+options(Args) ->
+    options(Args, [], #{}).
+
+options([], Pos, Opts) ->
+    {lists:reverse(Pos), Opts};
+options(["--" ++ Name, Value | Rest], Pos, Opts) ->
+    options(Rest, Pos, Opts#{Name => Value});
+options(["--" ++ Name], _Pos, _Opts) ->
+    throw({usage, ["wasm-bytes: --", Name, " needs a value"]});
+options([A | Rest], Pos, Opts) ->
+    options(Rest, [A | Pos], Opts).
+
+cases_dir(Opts) ->
+    maps:get("cases", Opts, filename:join(root(), "cases")).
+
+find_case(Id, Opts) ->
+    case wb_case:find(cases_dir(Opts), Id) of
+        {ok, C} -> C;
+        {error, not_found} ->
+            throw({fail, ["no case ", Id, " under ", cases_dir(Opts),
+                          "; bin/wasm-bytes cases lists them"]})
+    end.
+
+%% The id padded, never cut: scripts read the first column.
+case_line(#{id := Id, direction := read} = C) ->
+    [string:pad(Id, 36), " ", wb_case:call_text(C), "\n"];
+case_line(#{id := Id, direction := write, calls := Calls} = C) ->
+    [string:pad(Id, 36), " ", wb_case:signature(C),
+     io_lib:format(", checked on ~b calls~n", [length(Calls)])].
+
+compare_plan(Plan, Reply) ->
+    case wb_compare:compare_plan(Plan, input(Reply), relative(Reply)) of
+        {ok, C} ->
+            io:put_chars(wb_compare:report(C)),
+            case maps:get(verdict, C) of
+                pass -> 0;
+                _ -> 1
+            end;
+        {error, wasmtime_not_found} ->
+            throw({fail, "wasmtime not found: install it (https://wasmtime.dev) or set WASMTIME "
+                         "to its path. Nothing else in wasm-bytes needs it."});
+        {error, {malformed_hex, Why}} ->
+            throw({fail, io_lib:format("the reply is not hex: ~0p", [Why])})
+    end.
+
+%% Builds a track's cases. The default output is `_build/cases', for a corpus
+%% run; `--out cases' rewrites the sample kept in the repository.
+prepare("spec", Opts) ->
+    Out = maps:get("out", Opts, filename:join([root(), "_build", "cases"])),
+    Spec = #{out => Out, seed => int_opt("seed", Opts, 2026),
+             read => count_opt("read", Opts), write => count_opt("write", Opts)},
+    case wb_spec:prepare(root(), Spec) of
+        {ok, Sel} ->
+            io:put_chars(selection_report("spec", Out, Sel)),
+            0;
+        {error, {source_changed, Path, Hash}} ->
+            throw({fail, io_lib:format("~ts has sha256 ~ts, not the pinned file's", [Path, Hash])})
+    end;
+prepare("wasmbench", Opts) ->
+    From = case maps:find("from", Opts) of
+               {ok, F} -> F;
+               error -> throw({usage, "wasm-bytes: prepare wasmbench needs --from, the unpacked "
+                                      "archive; scripts/fetch-wasmbench.sh fetches it"})
+           end,
+    Out = maps:get("out", Opts, filename:join([root(), "_build", "cases"])),
+    Licenses = case maps:find("licenses", Opts) of
+                   {ok, File} ->
+                       {ok, Terms} = file:consult(File),
+                       maps:from_list(Terms);
+                   error -> #{}
+               end,
+    Spec = #{out => Out, seed => int_opt("seed", Opts, 2026), sample => count_opt("sample", Opts),
+             licenses => Licenses},
+    {ok, Sel} = wb_wasmbench:prepare(From, Spec),
+    io:put_chars(selection_report("wasmbench", Out, Sel)),
+    0;
+prepare("codecontests", Opts) ->
+    From = case maps:find("from", Opts) of
+               {ok, F} -> F;
+               error -> throw({usage, "wasm-bytes: prepare codecontests needs --from, the JSON "
+                                      "lines scripts/fetch-codecontests.sh writes"})
+           end,
+    Out = maps:get("out", Opts, filename:join([root(), "_build", "cases"])),
+    Spec = #{out => Out, seed => int_opt("seed", Opts, 2026), sample => count_opt("sample", Opts)},
+    {ok, Sel} = wb_contests:prepare(From, Spec),
+    io:put_chars(selection_report("codecontests", Out, Sel)),
+    0;
+prepare(Track, _Opts) ->
+    throw({usage, ["wasm-bytes: no track named ", Track]}).
+
+int_opt(Name, Opts, Default) ->
+    case maps:find(Name, Opts) of
+        {ok, V} -> list_to_integer(V);
+        error -> Default
+    end.
+
+count_opt(Name, Opts) ->
+    case maps:get(Name, Opts, "all") of
+        "all" -> all;
+        V -> list_to_integer(V)
+    end.
+
+selection_report(Track, Out, Sel) ->
+    Skipped = maps:get(skipped, Sel, []),
+    [io_lib:format("  ~-8s ~ts~n", ["track", Track]),
+     io_lib:format("  ~-8s ~b examined, ~b usable, ~b skipped~n",
+                   [ "source", maps:get(examined, Sel), maps:get(usable, Sel),
+                     lists:sum([N || {_, N} <- Skipped])]),
+     [io_lib:format("  ~-8s skipped ~b: ~ts~n", ["", N, Why]) || {Why, N} <- Skipped],
+     io_lib:format("  ~-8s ~b read, ~b write, seed ~b~n",
+                   ["cases", length(maps:get(read, Sel, [])), length(maps:get(write, Sel, [])),
+                    maps:get(seed, Sel)]),
+     io_lib:format("  ~-8s ~ts~n", ["written", filename:join(Out, Track)])].
 
 task("write") -> write;
 task("revise") -> revise;

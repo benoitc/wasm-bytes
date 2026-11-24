@@ -1,0 +1,5 @@
+Here is a complete WebAssembly module, as hex: two hexadecimal digits for each byte.
+
+{{MODULE_HEX}}
+
+What signed integer does {{CALL}} return? Reply with just the number.

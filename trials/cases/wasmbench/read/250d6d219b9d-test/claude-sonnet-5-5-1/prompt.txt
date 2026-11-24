@@ -1,0 +1,10 @@
+Here is a complete WebAssembly module, as hex: two hexadecimal digits for each byte.
+
+00 61 73 6d 01 00 00 00 01 05 01 60 00 01 7f 03
+02 01 00 05 03 01 00 01 07 11 02 06 6d 65 6d 6f
+72 79 02 00 04 74 65 73 74 00 00 0a 17 01 15 00
+41 04 28 02 00 41 01 71 04 7f 41 04 28 02 00 05
+41 00 0b 0b 00 13 04 6e 61 6d 65 01 07 01 00 04
+74 65 73 74 02 03 01 00 00
+
+What signed integer does test() return? Reply with just the number.
