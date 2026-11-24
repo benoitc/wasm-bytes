@@ -119,7 +119,16 @@ bin/wasm-bytes check case spec/write/add examples/cases/spec/write/add/subtracts
   verdict  wrong_answer
 ```
 
-**The batches.** Sonnet also answered a sample drawn from three public sources: the spec tests, real binaries from WasmBench, and CodeContests problems. Replay one track's totals:
+**From one question to 599.** Sonnet then answered questions from three public collections: the WebAssembly test suite, real files from WasmBench, and contest problems from CodeContests. It answered a sample of 33 first, kept here so you can replay it without a model account, then every usable question, 599 in all, one attempt each.
+
+| Question | Sample | Full run |
+| --- | --- | --- |
+| Read a test-suite program and predict a call | 12 of 12 right | 361 of 364 right |
+| Write a program for one test-suite instruction | 8 of 8 passed | 30 of 31 passed |
+| Read a real file from WasmBench and predict a call | 8 of 8 right | 183 of 192 right |
+| Write a program for a contest problem | 1 of 5 passed | 7 of 12 passed |
+
+Reading small programs went almost perfectly. On real files, most misses were the right number in bold Markdown, which the checker refuses, as it refuses anything but bare hex for a program. Contest problems are where the model struggles. Replay the sample's test-suite totals:
 
 ```sh
 bin/wasm-bytes batch spec claude-sonnet-5-5-1
@@ -136,7 +145,7 @@ bin/wasm-bytes batch spec claude-sonnet-5-5-1
            0 cases with no saved reply
 ```
 
-The other two tracks, how each sample was drawn from its pinned source, and how to run a larger corpus are in the guide. [Reading and writing tracks](doc/datasets.md) · [Results](doc/status.md#reading-and-writing-tracks)
+How the questions were chosen, how the run scales, and what the full run took and cost are in the guide. [Reading and writing WebAssembly](doc/datasets.md) · [Results](doc/status.md#reading-and-writing-tracks)
 
 ## A second function that does arithmetic
 
