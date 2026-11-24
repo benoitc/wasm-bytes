@@ -21,7 +21,7 @@
 -module(wb_case).
 
 -export([all/1, all/2, load/2, find/2, prompt/2, plan/1, check/2, report/1,
-         replies/1, batch/4, batch_report/1, read_answer/1, signature/1, call_text/1]).
+         replies/1, batch/4, batch/5, batch_report/1, read_answer/1, signature/1, call_text/1]).
 
 -export_type([case_/0, read_report/0]).
 
@@ -276,8 +276,14 @@ read_file(Path) ->
 %% how many source items were examined and why some were skipped.
 -spec batch(file:filename(), file:filename(), binary() | string(), binary() | string()) -> map().
 batch(Root, CasesDir, Track, Label) ->
+    batch(filename:join([Root, "trials", "cases"]), CasesDir, Track, Label, []).
+
+%% The same, with the replies under `RepliesDir' instead, such as the
+%% replies of a corpus run under `trials/corpus/'.
+-spec batch(file:filename(), file:filename(), binary() | string(), binary() | string(), []) -> map().
+batch(RepliesDir, CasesDir, Track, Label, []) ->
     Cases = all(CasesDir, Track),
-    Checked = [{C, reply_for(Root, C, Label)} || C <- Cases],
+    Checked = [{C, reply_for(RepliesDir, C, Label)} || C <- Cases],
     Selection = case file:consult(filename:join([CasesDir, Track, "selection.config"])) of
                     {ok, Terms} -> maps:from_list(Terms);
                     {error, _} -> #{}
@@ -285,8 +291,8 @@ batch(Root, CasesDir, Track, Label) ->
     #{track => bin(Track), label => bin(Label), selection => Selection,
       read => direction_summary(read, Checked), write => direction_summary(write, Checked)}.
 
-reply_for(Root, #{id := Id} = C, Label) ->
-    Path = filename:join([Root, "trials", "cases", Id, Label, "reply.txt"]),
+reply_for(RepliesDir, #{id := Id} = C, Label) ->
+    Path = filename:join([RepliesDir, Id, Label, "reply.txt"]),
     case file:read_file(Path) of
         {ok, Text} -> {ok, check(C, Text)};
         {error, enoent} -> missing

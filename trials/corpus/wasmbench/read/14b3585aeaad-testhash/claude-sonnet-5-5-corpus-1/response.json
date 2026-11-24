@@ -1,0 +1,17 @@
+{
+  "claude_code_version": "2.1.331",
+  "is_error": false,
+  "mcp_servers": [],
+  "model": "claude-sonnet-5-5",
+  "num_turns": 5,
+  "result": "I can't give you a trustworthy number. I have no way to execute code in this session, and `testhash(100)` is 100 rounds of 32-bit mixing that I can't do reliably by hand. I'd rather not guess.\n\nThe module does the following:\n\n- **`mix(a,b,c)`:** a stack-machine variant of Jenkins' mix, using `shr_s` (signed shifts) and returning one value.\n- **`testhash(x)`:** starts with `h = x`, then for `k = 0..99` sets `h = mix(h, x-100+k, x+100-k)` and returns `h`.\n\nThis Python reproduces it exactly:\n\n```python\nM = 0xFFFFFFFF\ndef s(x): return x - (1 << 32) if x >> 31 else x\ndef sar(x, n): return (s(x & M) >> n) & M\n\ndef mix(a, b, c):\n    c0 = c\n    a = ((a - b - c) ^ sar(c, 13)) & M\n    t = (c0 - a) & M\n    c = ((b - c0 - a) ^ (a << 8)) & M\n    t = (t - c) & M\n    b = (t ^ sar(c, 13)) & M\n    a = ((a - c - b) ^ sar(b, 12)) & M\n    t = (b - a) & M\n    c = ((c - b - a) ^ (a << 16)) & M\n    t = (t - c) & M\n    b = (t ^ sar(c, 5)) & M\n    a = ((a - c - b) ^ sar(b, 3)) & M\n    t = (b - a) & M\n    c = ((c - b - a) ^ (a << 10)) & M\n    t = (t - c) & M\n    return (t ^ sar(c, 15)) & M\n\ndef testhash(x):\n    h = x\n    for k in range(100):\n        h = mix(h, (x - 100 + k) & M, (x + 100 - k) & M)\n    return s(h)\n\nprint(testhash(100))\n```\n\nIf you run it, or give me a tool that can execute code, I can confirm the result.",
+  "tools": [],
+  "usage": {
+    "cache_creation_input_tokens": 8315,
+    "cache_read_input_tokens": 0,
+    "input_tokens": 10,
+    "output_tokens": 399891,
+    "output_tokens_details": { "thinking_tokens": 399220 }
+  }
+}
+

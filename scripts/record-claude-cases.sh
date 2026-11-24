@@ -15,13 +15,15 @@
 # already written, and STEP=label only checks saved replies; the default does
 # all three. `ask' runs nothing from this repository, so the runner can be
 # rebuilt while replies arrive. CASES=DIRECTORY reads the cases from a corpus
-# run, such as _build/cases, instead of cases/.
+# run, such as _build/cases, instead of cases/, and REPLIES=DIRECTORY writes
+# the replies there instead of under trials/cases/.
 set -eu
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 TRACK=$1 LABEL=$2 MODEL=$3
 shift 3
 SYSTEM="You are a helpful assistant."
 STEP=${STEP:-all}
+REPLIES=${REPLIES:-$ROOT/trials/cases}
 CASES_OPT=""
 if [ -n "${CASES:-}" ]; then
     CASES_OPT="--cases $CASES"
@@ -33,7 +35,7 @@ if [ $# -eq 0 ]; then
 fi
 
 for ID in "$@"; do
-    DIR="$ROOT/trials/cases/$ID/$LABEL"
+    DIR="$REPLIES/$ID/$LABEL"
     mkdir -p "$DIR"
     case $STEP in all|prompts)
         # shellcheck disable=SC2086

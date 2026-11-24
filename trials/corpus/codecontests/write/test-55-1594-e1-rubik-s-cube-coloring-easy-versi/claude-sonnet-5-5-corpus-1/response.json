@@ -1,0 +1,17 @@
+{
+  "claude_code_version": "2.1.331",
+  "is_error": false,
+  "mcp_servers": [],
+  "model": "claude-sonnet-5-5",
+  "num_turns": 1,
+  "result": "00 61 73 6d 01 00 00 00\n01 06 01 60 01 7f 01 7f\n03 02 01 00\n07 05 01 01 66 00 00\n0a 5f 01 5d\n01 03 7e\n42 01 20 00 ad 86 42 02 7d 21 01\n42 01 21 02\n42 04 21 03\n02 40 03 40\n20 01 50 0d 01\n20 01 42 01 83 a7\n04 40\n20 02 20 03 7e 42 87 94 eb dc 03 82 21 02\n0b\n20 03 20 03 7e 42 87 94 eb dc 03 82 21 03\n20 01 42 01 88 21 01\n0c 00\n0b 0b\n20 02 42 06 7e 42 87 94 eb dc 03 82 a7\n0b",
+  "tools": [],
+  "usage": {
+    "cache_creation_input_tokens": 1594,
+    "cache_read_input_tokens": 0,
+    "input_tokens": 2,
+    "output_tokens": 1907,
+    "output_tokens_details": { "thinking_tokens": 1635 }
+  }
+}
+
