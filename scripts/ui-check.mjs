@@ -221,15 +221,18 @@ async function main() {
     const evaluate = async (expression) =>
       (await send("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true })).result.value;
     const snap = async () => JSON.parse(await evaluate(SNAPSHOT));
+    // Clicks the element and returns the page's clock just after the click,
+    // so that a check can time what follows from the click itself, however
+    // long the browser took to deliver it; null if the element is missing.
     const click = async (id) => {
       const r = await evaluate(`(() => { const e = document.getElementById(${JSON.stringify(id)});
         if (!e) return null; e.scrollIntoView({ block: "center" });
         const b = e.getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2, w: b.width }; })()`);
-      if (!r || !r.w) return false;
+      if (!r || !r.w) return null;
       for (const type of ["mousePressed", "mouseReleased"]) {
         await send("Input.dispatchMouseEvent", { type, x: r.x, y: r.y, button: "left", clickCount: 1 });
       }
-      return true;
+      return evaluate("performance.now()");
     };
     const open = async (sub) => {
       await send("Page.navigate", { url: pathToFileURL(join(DIR, sub, "index.html")).href });
@@ -286,8 +289,7 @@ async function main() {
         : s.media.length ? "a media element played" : "no media playback requested when the sound turned on");
     const panOriginal = onBeeps.length ? panMatches(s, onBeeps, "original") : "no beeps";
 
-    t = s.now;
-    await click("mode-reversed");
+    t = (await click("mode-reversed")) ?? s.now;
     await sleep(1300);
     s = await snap();
     const afterSwitch = s.calls.filter((c) => c.t > t + 150);
@@ -301,8 +303,7 @@ async function main() {
     check("same_beep", sigOn.size > 0 && sigOn.size === sigRev.size && [...sigOn].every((x) => sigRev.has(x)),
       `original beeps ${[...sigOn].join(" ")}; reversed beeps ${[...sigRev].join(" ")}`);
 
-    t = s.now;
-    await click("pause");
+    t = (await click("pause")) ?? s.now;
     await sleep(500);
     s = await snap();
     const heldXs = new Set(s.calls.filter((c) => c.t > t + 200).map((c) => c.x));
@@ -315,8 +316,7 @@ async function main() {
     const wantedOriginal = expected.original(heldX);
     const pauseHolds = heldXs.size <= 1;
     const pauseUpdates = shownAfter.includes(heldX) && shownAfter.includes(wantedOriginal);
-    t = s.now;
-    await click("pause");
+    t = (await click("pause")) ?? s.now;
     await sleep(800);
     s = await snap();
     const resumed = new Set(s.calls.filter((c) => c.t > t + 100).map((c) => c.x)).size >= 3;
@@ -326,8 +326,7 @@ async function main() {
           : "each button selects the module screen_pan is called on");
     check("pause", pauseHolds && resumed, `${pauseHolds ? "holds one position" : `${heldXs.size} positions`} while paused; ${resumed ? "moves again" : "does not move again"} after the second click`);
 
-    t = s.now;
-    await click("sound");
+    t = (await click("sound")) ?? s.now;
     await sleep(700);
     s = await snap();
     const lateBeeps = s.beeps.filter((b) => b.t > t + 100);
@@ -342,8 +341,7 @@ async function main() {
     s = await snap();
     const probeOriginal = numbers(s.reading).includes(250) && !panMatches(s, panned(s.beeps, s.now - 900), "original", 250)
       && panned(s.beeps, s.now - 900).length > 0;
-    t = s.now;
-    await click("mode-reversed");
+    t = (await click("mode-reversed")) ?? s.now;
     await sleep(1000);
     s = await snap();
     const probeReversed = numbers(s.reading).includes(-125) && !panMatches(s, panned(s.beeps, t + 150), "reversed", -125)
