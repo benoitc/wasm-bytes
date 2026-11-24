@@ -1,6 +1,8 @@
 # wasm-bytes
 
-Can you describe a function to a language model and use its reply as a program? In this experiment, Claude Sonnet 5.5 answered with 54 bytes of WebAssembly (Wasm). Those bytes define a function that an application can load and call. The model wrote the whole file, from the Wasm header to the final instruction. [Exact prompt](trials/write/claude-sonnet-5-5-1/prompt.txt) · [Unedited reply](trials/write/claude-sonnet-5-5-1/reply.txt)
+Can a language model write a program directly as WebAssembly bytes? In this experiment, you describe a function in English, the model replies with every byte of a WebAssembly (Wasm) file, and a checker runs those bytes without changing any. Claude Sonnet 5.5 answered the first prompt with 54 bytes: a complete file, from the Wasm header to the final instruction, that an application can load and call. [Exact prompt](trials/write/claude-sonnet-5-5-1/prompt.txt) · [Unedited reply](trials/write/claude-sonnet-5-5-1/reply.txt)
+
+<p class="actions"><a href="https://benoitc.github.io/wasm-bytes/demo/pan/">Try the sound demo</a> <a href="#from-the-models-reply-to-a-function-call">See the prompt and reply</a></p>
 
 The idea comes from George Xenos and Sotiris Giannopoulos’s experiment in writing native executables byte by byte. Using Wasm gives us a way to take one model reply and run it inside an Erlang application, in JavaScript, or in a standalone runtime such as Wasmtime. [Programming in the Machine Code Space](https://sgiannopoulos.github.io/blog/machine-code-programming/)
 
@@ -70,15 +72,17 @@ bin/wasm-bytes check digits trials/digits/claude-haiku-5-5-1/reply.txt
 
 ## How we reused a DX-Ball sound rule
 
-**What REA did.** The REA team used its tool to inspect the old DX-Ball game and published the rule that turns a brick’s position into a number for the sound system. We used their write-up to design this experiment. You can build and run the demo without REA. In our browser demo, −500 means the left speaker, 0 means the middle, and 500 means the right speaker. [REA case study](https://github.com/morluto/rea#dx-ball-reconstruct-a-sound-pan-calculation)
+The sound demo is the second example. It reuses one rule from the 1996 game DX-Ball: how far left or right a sound plays when the ball hits a brick.
+
+**What REA did.** REA is a tool for understanding compiled programs. Its team used it to inspect the old game and published the calculation that turns a brick’s position into a number for the sound system. That calculation is what this project took from REA: we used it to write the prompt, and the model wrote the Wasm. You can build and run the demo without REA. In our browser demo, −500 means the left speaker, 0 means the middle, and 500 means the right speaker. [REA case study](https://github.com/morluto/rea#dx-ball-reconstruct-a-sound-pan-calculation)
 
 **What we asked Claude to do.** We put REA’s calculation in a prompt and asked Claude to write a function called `screen_pan` that our app could load. Here is the opening instruction from the prompt. “Write a complete WebAssembly module in the binary format (the bytes of a .wasm file, version 1) and reply with its bytes as hex.” [Full prompt](trials/pan/claude-sonnet-5-5-1/prompt.txt)
 
-**What a developer gets.** Sonnet returned a 76-byte program. The app calls `screen_pan(640)`, gets back `500`, and plays the sound on the right. We gave Sonnet those bytes and asked it to reverse the stereo. With the revised file, the exact same call returns `−500`, so the sound plays on the left. A developer can swap that one rule without rewriting the app or calling an AI service during playback. Both versions passed every one of the 641 positions tested. [Original reply](trials/pan/claude-sonnet-5-5-1/reply.txt) · [Change request](trials/reverse/claude-sonnet-5-5-1/prompt.txt) · [Revised reply](trials/reverse/claude-sonnet-5-5-1/reply.txt)
+**What a developer gets.** Sonnet returned a 76-byte program. The app calls `screen_pan(640)`, gets back `500`, and plays the sound on the right. We gave Sonnet those bytes and asked it to reverse the stereo. With the revised file, the exact same call returns `−500`, so the sound plays on the left. A developer can swap that one rule without rewriting the app or calling an AI service during playback. Both versions matched the published rule at all 641 positions, every x from 0 through 640. [Original reply](trials/pan/claude-sonnet-5-5-1/reply.txt) · [Change request](trials/reverse/claude-sonnet-5-5-1/prompt.txt) · [Revised reply](trials/reverse/claude-sonnet-5-5-1/reply.txt)
 
 ![The ball moves right in both versions. The sound follows it in Original mode and travels left in Reversed mode.](doc/media/dx-ball-pan-replay.gif)
 
-To hear it, run the command below, turn **Sound** on, and switch from **Original** to **Reversed**. The ball follows the same path on both passes. [What REA found, the full prompt, and what came back](doc/dx-ball.md)
+To hear it, open the [live demo](https://benoitc.github.io/wasm-bytes/demo/pan/) or run the command below. Turn **Sound** on, watch the ball reach the right edge, then select **Reversed**. [The whole flow, from REA's finding to the speaker](doc/dx-ball.md)
 
 ```sh
 bin/wasm-bytes pan-demo

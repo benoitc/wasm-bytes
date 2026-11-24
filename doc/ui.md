@@ -4,9 +4,7 @@ The DX-Ball demo has two parts: the WebAssembly modules that compute the pan, an
 
 ## What the model receives
 
-The page prompt comes last. First, two module prompts ask a model for the WebAssembly itself: the `pan` prompt for the original rule, then the `reverse` prompt for the reversed one, each reply checked by the runner. `bin/wasm-bytes pan-demo` puts the two accepted modules into `modules.js`, as base64. By default these are Claude Sonnet 5.5's recorded replies, and every page on the site loads them. [How the modules were made](dx-ball.md)
-
-![The flow: the pan prompt gives the Original module, the reverse prompt the Reversed one, pan-demo puts both in modules.js, then the ui prompt gives the page, which loads modules.js in your browser and pans each beep by screen_pan(x) / 500.](media/ui-flow.svg)
+The page prompt comes last. First, two module prompts ask a model for the WebAssembly itself: the `pan` prompt for the original rule, then the `reverse` prompt for the reversed one, each reply checked by the runner. `bin/wasm-bytes pan-demo` puts the two accepted modules into `modules.js`, as base64. By default these are Claude Sonnet 5.5's recorded replies, and every page on the site loads them. So a page can be written by one model and run sound modules written by another. [The whole flow, from REA's finding to the speaker](dx-ball.md#how-we-made-it)
 
 The page prompt describes the demo and fixes the contract a page must keep. The page loads `modules.js`, which supplies the two modules as base64. It gets every pan value by calling `screen_pan(x)` on the selected module. It plays a beep every 200 ms through a `StereoPannerNode` whose pan is the value divided by 500. Every beep is the same in both modes. The controls use fixed element ids (`sound`, `mode-original`, `mode-reversed`, `pause`, `reading`), so that a test can find them. The prompt also asks for three outcomes without saying how to reach them: the page works in Safari on an iPhone with the silent switch on, makes no network request, and fits a phone screen. The reply is saved as `index.html` and opened as it is.
 

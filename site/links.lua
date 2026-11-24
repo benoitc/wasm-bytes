@@ -2,6 +2,7 @@
 -- site renders goes to its HTML; README.md is the site's index. A link to
 -- anything else in the repository, such as a source file or a recorded
 -- reply, goes to it on GitHub. Images stay relative: the build copies them.
+-- Links in raw HTML are rewritten the same way.
 local function is_page(path)
   return path == "README.md" or path == "trials/README.md"
       or path:match("^doc/[^/]+%.md$") ~= nil
@@ -28,10 +29,24 @@ function Pandoc(doc)
     return repo .. "/" .. kind .. "/main/" .. full:gsub("^%./", "") .. frag
   end
 
+  -- Links written as HTML inside a page, such as the DX-Ball flow, get the
+  -- same treatment as Markdown links.
+  local function rewrite_html(raw)
+    if raw.format ~= "html" then
+      return nil
+    end
+    raw.text = raw.text:gsub('href="([^"]*)"', function(target)
+      return 'href="' .. resolve(target) .. '"'
+    end)
+    return raw
+  end
+
   return doc:walk({
     Link = function(link)
       link.target = resolve(link.target)
       return link
     end,
+    RawBlock = rewrite_html,
+    RawInline = rewrite_html,
   })
 end

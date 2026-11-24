@@ -92,6 +92,53 @@ details[open] summary{margin-bottom:10px}
 .entry p{font-size:15.5px}
 .preview{display:block;width:100%;height:720px;margin:6px 0 4px;border:0;border-radius:10px;box-shadow:inset 0 0 0 1px var(--card-edge)}
 
+/* The DX-Ball flow: numbered steps, joined by labelled arrows that say what
+   passes from one step to the next. The arrows carry the accent. */
+.flow{list-style:none;padding:0;margin:8px 0 0;counter-reset:step}
+.flow>li{counter-increment:step;margin:0;max-width:none}
+.via{position:relative;margin:0 0 0 30px;padding:12px 0 18px 20px;border-left:2px solid var(--link);color:var(--ink);font-size:15px;font-style:italic;font-weight:600;max-width:none}
+.via::after{content:"";position:absolute;left:-7px;bottom:-1px;border-left:6px solid transparent;border-right:6px solid transparent;border-top:9px solid var(--link)}
+.card{position:relative;padding:16px 20px 14px 64px;background:var(--card);border-radius:14px;box-shadow:0 1px 2px rgba(60,20,10,0.06),inset 0 0 0 1px var(--card-edge)}
+.card p{max-width:none;margin:0}
+.flow>li>.card::before{content:counter(step);position:absolute;left:18px;top:15px;width:30px;height:30px;border-radius:50%;background:var(--grad);color:#fff;font-weight:800;font-size:15px;line-height:30px;text-align:center}
+.card .what strong{display:block;font-size:18px;font-stretch:106%;line-height:1.3;margin:2px 0 4px}
+.card .out{margin-top:10px;padding:10px 14px;border-radius:10px;background:var(--chip);color:var(--chip-text);font-size:15.5px}
+.card .out code{background:none;padding:0;color:inherit}
+.card .refs{margin-top:10px;font-size:15px}
+.excerpt{margin:10px 0 0;padding:12px 16px;border:0;border-image:none;border-radius:10px;background:linear-gradient(135deg,var(--warm),var(--warm-2));color:var(--warm-text);font:14.5px/1.55 ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+.excerpt p{margin:0 0 6px}
+.excerpt p:last-child{margin:0}
+.excerpt .excerpt-label{font:600 13px "Archivo",system-ui,sans-serif;color:#ffb38a;margin-bottom:8px}
+.meet{display:grid;grid-template-columns:1fr 1fr;gap:0 16px;align-items:stretch;margin:0}
+/* Both inputs end on their arrow into the browser. The arrow from step 4
+   stretches down to the saved files; the third prompt starts a little lower. */
+.meet .input{display:flex;flex-direction:column;justify-content:flex-end}
+.meet .input:first-child>.via:first-child{flex:1}
+.meet .input:last-child{padding-top:22px}
+.meet .card.plain{padding:14px 16px 12px}
+.card.browser{padding:16px 20px 14px;overflow:hidden}
+.card.browser::before{content:"";position:absolute;top:0;left:0;right:0;height:4px;background:var(--stripe)}
+.play{list-style:none;padding:0;margin:8px 0 18px;display:flex;align-items:stretch}
+.play li{flex:1;position:relative;margin:0;padding:12px 14px;background:var(--card);border-radius:12px;box-shadow:inset 0 0 0 1px var(--card-edge);font-size:15.5px;font-weight:600;color:var(--ink);max-width:none}
+.play li+li{margin-left:30px}
+.play li+li::before{content:"→";position:absolute;left:-23px;top:50%;transform:translateY(-50%);color:var(--link);font-weight:800}
+.outcomes{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:0 0 14px}
+.outcome{margin:0;max-width:none;padding:14px 16px;border-radius:12px;background:var(--chip);color:var(--chip-text);font-size:16px}
+.outcome strong{display:block;font-size:13.5px;color:var(--muted);font-weight:600}
+.outcome code{background:none;padding:0;color:var(--ink);font-size:22px;font-weight:700}
+.caption{font-size:15px;color:var(--muted)}
+
+/* The README's two first choices. */
+.actions{display:flex;flex-wrap:wrap;gap:12px;margin:22px 0 28px;max-width:none}
+.actions a{display:inline-flex;align-items:center;min-height:48px;padding:0 24px;border-radius:999px;font-weight:600;font-size:16px;text-decoration:none;background:var(--ink);color:var(--paper)}
+.actions a:hover{background:var(--link);color:#fff}
+.actions a+a{background:none;color:var(--ink);box-shadow:inset 0 0 0 1.5px var(--ink)}
+.actions a+a:hover{background:var(--ink);color:var(--paper)}
+
+/* Who wrote what, on each page in the gallery. */
+.credits{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 12px;padding:0;list-style:none}
+.credits li{margin:0;padding:4px 12px;border-radius:999px;background:var(--chip);color:var(--chip-text);font-size:14px;font-weight:600}
+
 /* Footer */
 .site-foot{padding:36px 0 48px;background:var(--foot);color:var(--warm-text);font-size:14.5px}
 .site-foot a{color:#fff}
@@ -108,6 +155,16 @@ details[open] summary{margin-bottom:10px}
   .head-nav::-webkit-scrollbar{display:none}
   h2{margin-top:44px}
   .entry{padding:20px 16px 14px}
+  .card{padding:14px 14px 12px 54px}
+  .flow>li>.card::before{left:12px;top:13px}
+  .meet{gap:0 10px}
+  .meet .card.plain{padding:12px 12px 10px}
+  .meet .card .what strong{font-size:16px}
+  .meet .card p{font-size:14.5px}
+  .via{margin-left:26px;padding-left:14px;font-size:14px}
+  .play{flex-direction:column}
+  .play li+li{margin:26px 0 0}
+  .play li+li::before{content:"↓";left:18px;top:-24px;transform:none}
   .preview{height:640px}
 }
 @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}.anchor{transition:none}}
