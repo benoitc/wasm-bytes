@@ -124,6 +124,34 @@ On 24 November, a second prompt also described how the hand-written demo looks. 
 
 All four pages follow the described look closely. The checks do not compare the look, so that was judged by eye. Sonnet's page first got `ui_failed`, from a timing flaw in the `pause` check. The check now times its window from the click, and the unchanged page passes. [The second round](ui.md#with-the-look-described) · [Prompt](../prompts/ui.txt)
 
+## Reading and writing tracks
+
+On 24 November 2026, Claude Sonnet 5.5 answered a sample from three public sources, one attempt per case. It predicted every tested call correctly: 12 of 12 on the spec tests' one-instruction modules, and 8 of 8 on real WasmBench binaries. It wrote a module that passed every check for all 8 spec instructions it was asked for, and for 1 of the 5 contest problems. These numbers come from one model and one attempt per case, on small modules and a small sample. They say what happened on these cases, not how often a model succeeds. [How the cases are drawn and checked](datasets.md)
+
+| Track | What was asked | Result |
+| --- | --- | --- |
+| Spec tests, reading | 12 calls to one-instruction modules built from `i32.wast` | 12 of 12 predictions correct |
+| Spec tests, writing | 8 instructions described in English, each checked on its 7 to 17 upstream assertions | 8 of 8 valid modules, 8 of 8 passed every check |
+| WasmBench, reading | 8 calls to real binaries of 74 to 751 bytes, from openly licensed projects | 8 of 8 predictions correct |
+| CodeContests, writing | 5 problems, each checked on its 58 to 248 private and generated tests | 3 of 5 valid modules, 1 of 5 passed every check |
+
+The contest problem Sonnet solved is the easiest of the five, "New Year Candles": a 48-byte module that passed all 104 graded calls. Two replies are not valid modules. In each, the code section declares one byte more than it holds: 86 bytes for 85, and 212 for 211. The other two modules are valid but did not finish within five seconds on a large input. Both are Codeforces problems of difficulty 11 and 12. [Trials](../trials/cases/)
+
+For the addition example, the reading case and the writing case are separate attempts. Sonnet's writing reply is the same 39 bytes as the module the reading prompt shows, although the writing prompt never showed it.
+
+<details>
+<summary>How each sample was drawn</summary>
+
+| Track | Source examined | Usable | Skipped, and why |
+| --- | --- | --- | --- |
+| Spec tests | 374 assertions in `i32.wast` at testsuite `92a3d80` | 364 | 10 traps, which leave no value to predict |
+| WasmBench | 8,461 binaries in the v1.0 filtered release | 192 | 7,612 larger than 2,048 bytes; 540 with imports; 99 without an integer export; 17 with no call that returned; 1 that cannot be instantiated |
+| CodeContests | 624 problems in the valid, test, and first training files at revision `802411c` | 12 | 594 whose input is not one or two integers; 12 whose output is not one integer; 5 with a value beyond 32 bits; 1 with conflicting tests |
+
+Each sample takes the usable items in the order of the SHA-256 of `"2026:<id>"`. The WasmBench sample takes only binaries from openly licensed projects. The spec sample always includes the addition example. Replay each total with `bin/wasm-bytes batch TRACK claude-sonnet-5-5-1`.
+
+</details>
+
 ## Cross-engine and platform runs
 
 The Sonnet `retry` module and the three `digit_sum` modules gave the reference answer for every tested input (528 and 1,353) in two engines, erlang_wasm and Wasmtime, on three host configurations of one Apple silicon Mac: macOS, Linux, and Linux with x86_64 emulated. These runs establish that the two engines agree on these modules on one host. A run on separate x86_64 hardware has not been recorded yet. [Commands, records, and limits](evidence.md)

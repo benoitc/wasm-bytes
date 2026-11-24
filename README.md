@@ -60,6 +60,84 @@ bin/wasm-bytes compare write trials/write/claude-sonnet-5-5-1/reply.txt
 
 Both engines matched all 528 answers on macOS arm64 and in Linux containers on arm64 and emulated x86_64. All three runs used one Mac. [Recorded module fingerprint](trials/write/claude-sonnet-5-5-1/module.sha256) · [Platform runs and how to repeat them](doc/evidence.md#3-the-same-bytes-in-another-engine-and-on-other-hosts)
 
+## Reading and writing: 32-bit addition
+
+The experiment also runs in the other direction. In a reading task, the model sees a module's bytes and predicts what one call returns. In a writing task, it gets an English description and writes the module. Both start here with 32-bit integer addition from the official WebAssembly spec tests.
+
+**Reading.** The model sees the module as hex and one question. The prompt has no operation name, no source code, and no answer. [Exact prompt](trials/cases/spec/read/add-41/claude-sonnet-5-5-1/prompt.txt)
+
+```text
+00 61 73 6d 01 00 00 00 01 07 01 60 02 7f 7f 01
+7f 03 02 01 00 07 05 01 01 66 00 00 0a 09 01 07
+00 20 00 20 01 6a 0b
+
+What signed integer does f(2147483647, 1) return? Reply with just the number.
+```
+
+The module's function `f` adds its two arguments. 2147483647 is the largest signed 32-bit integer, so adding 1 wraps around to −2147483648, the value the spec tests assert. Sonnet replied with just `-2147483648`. Check that reply:
+
+```sh
+bin/wasm-bytes check case spec/read/add-41 trials/cases/spec/read/add-41/claude-sonnet-5-5-1/reply.txt
+```
+
+```text
+  call     f(2147483647, 1)
+  answer   -2147483648
+  expected -2147483648
+  verdict  pass
+```
+
+`pass` means the reply is that one number. A reply of `2147483648`, the same bits read as unsigned, gets `wrong_answer`. A sentence around the right number gets `malformed_answer`, because the checker reads nothing out of a longer reply. [Both examples](examples/cases/spec/read/add-41/)
+
+**Writing.** The model receives this sentence, followed by the rules for formatting the reply: "Write a complete WebAssembly module that exports f(i32, i32) -> i32. It adds its two arguments, wrapping on 32-bit overflow. Reply with the complete file as hex." Sonnet sent back 39 bytes. Check them:
+
+```sh
+bin/wasm-bytes check case spec/write/add trials/cases/spec/write/add/claude-sonnet-5-5-1/reply.txt
+```
+
+```text
+  hex      39 bytes
+  wasm     decodes and validates (erlang_wasm 0.11.0)
+  profile  exports f : (i32, i32) -> (i32); no imports
+  calls    8 inputs, each in a fresh instance; fuel 10000 and a 1000 ms deadline per call
+  answers  8 of 8 match the reference
+  verdict  pass
+```
+
+erlang_wasm validated the module, and the runner called `f` on the 8 inputs the spec tests assert for addition, including the overflow. `pass` means every call returned the asserted value. Any module that does so passes, whatever its bytes. These 39 happen to equal the module in the reading prompt, although the writing prompt never showed it. With Wasmtime installed, `bin/wasm-bytes compare case spec/write/add` runs the same bytes there too. [Exact prompt](trials/cases/spec/write/add/claude-sonnet-5-5-1/prompt.txt) · [Unedited reply](trials/cases/spec/write/add/claude-sonnet-5-5-1/reply.txt)
+
+**A valid module with a wrong answer.** This hand-written reply is the same module with one byte changed: `6a` (`i32.add`) became `6b` (`i32.sub`). It decodes, validates, and runs, and the check names the first input where it differs.
+
+```sh
+bin/wasm-bytes check case spec/write/add examples/cases/spec/write/add/subtracts/reply.txt
+```
+
+```text
+  wrong    6 answers differ from the reference
+  first    input (1, 1): expected 2, got 0
+  answers  2 of 8 match the reference
+  verdict  wrong_answer
+```
+
+**The batches.** Sonnet also answered a sample drawn from three public sources: the spec tests, real binaries from WasmBench, and CodeContests problems. Replay one track's totals:
+
+```sh
+bin/wasm-bytes batch spec claude-sonnet-5-5-1
+```
+
+```text
+  track    spec, replies labelled claude-sonnet-5-5-1
+  source   374 examined, 364 usable, 10 skipped
+           skipped 10: the call traps, so there is no value to predict
+  read     12 correct predictions out of 12 attempted calls
+           0 cases with no saved reply
+  write    8 of 8 first replies were valid modules
+           8 of 8 passed every behavioral check
+           0 cases with no saved reply
+```
+
+The other two tracks, how each sample was drawn from its pinned source, and how to run a larger corpus are in the guide. [Reading and writing tracks](doc/datasets.md) · [Results](doc/status.md#reading-and-writing-tracks)
+
 ## A second function that does arithmetic
 
 `digit_sum` takes an integer and adds its decimal digits. A host calling `digit_sum(407)` gets 11 back because 4 + 0 + 7 = 11. Calling `digit_sum(-407)` gives the same answer because the function ignores the sign. It uses the same Wasm interface as `retry` (one integer in, one integer out), but here the returned number is the answer to a calculation.
@@ -156,6 +234,7 @@ The program ran, but it declined to retry status 599. That single input is enoug
 - Run `bin/wasm-bytes demo` to replay everything locally. The summary compares each observed verdict with its saved label. A deliberately wrong example counts as a successful replay when it fails as expected.
 - Read the recorded trials and their limits. Opus and Sonnet passed every task on their recorded attempts. A local model run through Ollama failed both tasks with the baseline prompts, then passed `digit_sum` with the guided prompt. [Project status](doc/status.md)
 - See what REA recovered from DX-Ball, what was checked, and what remains unknown. [DX-Ball sound pan](doc/dx-ball.md)
+- Measure reading and writing over three public datasets: list the cases, replay a batch, or prepare a larger corpus from a pinned source. [Reading and writing tracks](doc/datasets.md)
 - Save a run from your own model so someone else can replay it. [Record a trial](trials/README.md)
 
 ## Watch a prompt become a running Wasm function
