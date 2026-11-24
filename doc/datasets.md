@@ -63,11 +63,11 @@ The rest of this project asks a model to write small programs from descriptions 
 
 ## One example of each
 
-Both examples come from the same check in the WebAssembly test suite. Adding 1 to 2147483647, the largest signed 32-bit integer, wraps around to −2147483648.
+Both examples use the same fact from the official WebAssembly tests. Wasm stores these numbers in 32 bits, so the largest is 2147483647. Add 1 to it and the result wraps around to the smallest, −2147483648.
 
 ### Read the bytes, predict the answer
 
-This is the whole prompt. It doesn't name the operation, show source code, or give the answer. [The prompt as sent](../trials/cases/spec/read/add-41/claude-sonnet-5-5-1/prompt.txt)
+This is everything the model sees. Nothing in it names the operation, shows the code, or gives the answer. [The prompt as sent](../trials/cases/spec/read/add-41/claude-sonnet-5-5-1/prompt.txt)
 
 ```text
 Here is a complete WebAssembly module, as hex: two hexadecimal digits for each byte.
@@ -79,7 +79,7 @@ Here is a complete WebAssembly module, as hex: two hexadecimal digits for each b
 What signed integer does f(2147483647, 1) return? Reply with just the number.
 ```
 
-The function `f` adds its two arguments. Sonnet replied with just `-2147483648`. Check that reply:
+The file's function, `f`, adds its two numbers. Sonnet replied with just `-2147483648`. To check that reply yourself:
 
 ```sh
 bin/wasm-bytes check case spec/read/add-41 trials/cases/spec/read/add-41/claude-sonnet-5-5-1/reply.txt
@@ -92,11 +92,11 @@ bin/wasm-bytes check case spec/read/add-41 trials/cases/spec/read/add-41/claude-
   verdict  pass
 ```
 
-`pass` means the reply is that one number. A reply of `2147483648`, the same bits read as unsigned, gets `wrong_answer`. A sentence around the right number gets `malformed_answer`, because the checker reads nothing out of a longer reply. [Both failing examples](../examples/cases/spec/read/add-41/)
+`pass` means the reply is exactly the right number. A reply of `2147483648`, the same bits read as a number that can't be negative, gets `wrong_answer`. A sentence around the right number gets `malformed_answer`, because the checker accepts the number alone and nothing else. [Both failing examples](../examples/cases/spec/read/add-41/)
 
 ### Write bytes that pass the tests
 
-The model gets one sentence, then the rules for formatting the reply: "Write a complete WebAssembly module that exports f(i32, i32) -> i32. It adds its two arguments, wrapping on 32-bit overflow. Reply with the complete file as hex." Sonnet sent back 39 bytes. Check them:
+The model gets one sentence, followed by the same formatting rules as every writing task: "Write a complete WebAssembly module that exports f(i32, i32) -> i32. It adds its two arguments, wrapping on 32-bit overflow. Reply with the complete file as hex." Sonnet sent back 39 bytes. To check them yourself:
 
 ```sh
 bin/wasm-bytes check case spec/write/add trials/cases/spec/write/add/claude-sonnet-5-5-1/reply.txt
@@ -111,9 +111,9 @@ bin/wasm-bytes check case spec/write/add trials/cases/spec/write/add/claude-sonn
   verdict  pass
 ```
 
-erlang_wasm validated the file, then the runner called `f` on the 8 inputs the test suite checks for addition, the overflow included. `pass` means every call returned the expected value. Any file that does so passes, whatever its bytes. These 39 happen to equal the file in the reading prompt, although the writing prompt never showed it. [The prompt as sent](../trials/cases/spec/write/add/claude-sonnet-5-5-1/prompt.txt) · [The unedited reply](../trials/cases/spec/write/add/claude-sonnet-5-5-1/reply.txt)
+erlang_wasm confirmed that the file follows the rules of Wasm. Then the checker called `f` with the 8 pairs of numbers the official tests use for addition, including the one that wraps around. `pass` means every call gave the expected answer. Any file that does so passes, however its bytes are written. These 39 bytes happen to be the same as the file in the reading example, although the model never saw that file. [The prompt as sent](../trials/cases/spec/write/add/claude-sonnet-5-5-1/prompt.txt) · [The unedited reply](../trials/cases/spec/write/add/claude-sonnet-5-5-1/reply.txt)
 
-A valid file can still give wrong answers. This hand-written reply is the same file with one byte changed: `6a` (add) became `6b` (subtract). It decodes, validates and runs, and the check names the first input where it goes wrong.
+A file can follow every rule and still give wrong answers. This example reply is the same file with one byte changed: `6a` (add) became `6b` (subtract). It still runs, and the check shows you the first numbers where it goes wrong.
 
 ```sh
 bin/wasm-bytes check case spec/write/add examples/cases/spec/write/add/subtracts/reply.txt
@@ -151,7 +151,7 @@ We sent the questions to Claude Sonnet 5.5, one attempt each, in two rounds on 2
 
 **Writing a single instruction was easy, and a contest problem was hard.** 30 of the 31 instruction programs passed. The one miss, bitwise AND, had passed in the sample run, so the same task can go either way from one attempt to the next. 7 of the 12 contest problems passed: every problem rated 7 to 9 on the dataset's scale, 2 of the 6 rated 10 to 12, and one of the two unrated AtCoder problems. Of the 5 failures, 2 replies are not valid WebAssembly, because the file ends before a section it declares. One fails validation, one is too slow on a large input, and one crashes on the input −27. That last problem only allows inputs from 1 to 32, but some of the dataset's generated tests go outside a problem's own limits.
 
-These numbers describe one model and one attempt per question. They tell you what happened on these questions, not how often a model succeeds in general. [All results](status.md#reading-and-writing-tracks)
+These numbers describe one model and one attempt per question. They tell you what happened on these questions, not how often a model succeeds in general. [All results](status.md#reading-and-writing-at-scale)
 
 ## How it scales
 
