@@ -6,6 +6,8 @@ set -eu
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 OUT=${1:-$ROOT/_build/site}
 REPO_URL=${REPO_URL:-https://github.com/benoitc/wasm-bytes}
+# Where the site is published: links to it become links within the build.
+SITE_URL=$(printf '%s' "$REPO_URL" | sed -E 's#https://github.com/([^/]+)/([^/]+).*#https://\1.github.io/\2/#')
 
 command -v pandoc >/dev/null || { echo "build-site: pandoc is needed" >&2; exit 2; }
 rm -rf "$OUT"
@@ -32,21 +34,51 @@ done
 render trials/README.md trials/README.html "../"
 
 cp -R "$ROOT/doc/media" "$OUT/doc/media"
-# The stylesheet, and the font, its license and the logo it uses.
-cp "$ROOT/site/style.css" "$ROOT/site/archivo-latin.woff2" "$ROOT/site/archivo-OFL.txt" \
-    "$ROOT/site/enki-logo.svg" "$OUT/"
+# The stylesheets, and the font, its license and the logo they use.
+cp "$ROOT/site/style.css" "$ROOT/site/chrome.css" "$ROOT/site/archivo-latin.woff2" \
+    "$ROOT/site/archivo-OFL.txt" "$ROOT/site/enki-logo.svg" "$OUT/"
 
-# The demo page, with the modules checked again and embedded.
+# The demo page, with the modules checked again and embedded. It keeps its
+# own stylesheet and gets the top bar and footer every other page has,
+# taken from the template, with chrome.css to style them. Its links to the
+# published site, which it needs when bin/wasm-bytes pan-demo opens it on
+# its own, become links within the build.
 "$ROOT/bin/wasm-bytes" pan-demo --no-open >/dev/null
-cp "$ROOT"/_build/pan-demo/* "$OUT/demo/pan/"
+cp "$ROOT"/_build/pan-demo/app.js "$ROOT"/_build/pan-demo/modules.js "$OUT/demo/pan/"
+CHROME="$ROOT/_build/site-src/chrome"
+mkdir -p "$CHROME"
+sed -n '/<a class="skip"/,/<\/header>/p' "$ROOT/site/template.html" |
+    sed -e 's#\${root}#../../#g' -e "s#\\\$repo\\\$#$REPO_URL#g" > "$CHROME/head.html"
+sed -n '/<footer class="site-foot">/,/<\/footer>/p' "$ROOT/site/template.html" |
+    sed -e 's#\${root}#../../#g' -e "s#\\\$repo\\\$#$REPO_URL#g" \
+        -e 's#\$source\$#demo/pan/index.html#g' > "$CHROME/foot.html"
+awk -v head="$CHROME/head.html" -v foot="$CHROME/foot.html" -v site="$SITE_URL" '
+    function local_links(s,    out, i) {
+        out = ""
+        while ((i = index(s, site)) > 0) {
+            out = out substr(s, 1, i - 1) "../../"
+            s = substr(s, i + length(site))
+        }
+        return out s
+    }
+    { $0 = local_links($0) }
+    /<\/head>/ {
+        print "<link rel=\"icon\" type=\"image/svg+xml\" href=\"../../enki-logo.svg\">"
+        print "<link rel=\"preload\" href=\"../../archivo-latin.woff2\" as=\"font\" type=\"font/woff2\" crossorigin>"
+        print "<link rel=\"stylesheet\" href=\"../../chrome.css\">"
+    }
+    /<\/body>/ { while ((getline line < foot) > 0) print line }
+    { print }
+    /<body>/ { while ((getline line < head) > 0) print line }
+' "$ROOT/_build/pan-demo/index.html" > "$OUT/demo/pan/index.html"
 
 # The demo pages the models wrote, for every ui trial: each reply as it is,
 # beside the same modules.js, and a page listing them, after the DX-Ball
-# flow. Pages that answered today's ui prompt come first, then those that
-# answered an earlier one; a trial's prompt.txt says which. Within each,
-# pages that passed every browser check come first. The list shows each
-# page in a sandboxed frame and links to it on its own, since Safari on iOS
-# may not play audio from a frame.
+# flow. The second attempts, which answered the current ui prompt, come
+# first, then the first attempts, which answered an earlier one; a trial's
+# prompt.txt says which. Within each, pages that passed every browser check
+# come first. The list shows each page in a sandboxed frame and links to it
+# on its own, since Safari on iOS may not play audio from a frame.
 GALLERY="$ROOT/_build/site-src/ui.md"
 SRC="$ROOT/_build/site-src"
 PROMPTS="$SRC/prompts"
@@ -108,7 +140,8 @@ bin/wasm-bytes check ui page.html --original pan.txt --reversed reversed.txt
 
 STEPS
 
-# Whether a trial received today's ui prompt, baseline or guided.
+# Whether a trial received the current ui prompt, baseline or guided:
+# the second round of pages.
 current() {
     cmp -s "$1/prompt.txt" "$PROMPTS/ui.txt" || cmp -s "$1/prompt.txt" "$PROMPTS/ui.guided.txt"
 }
@@ -141,9 +174,9 @@ gallery_entry() {
     page_name=$(display_name "$(sed -n 's/^{model, "\([^"]*\)"}\./\1/p' "$dir/fixture.config")")
     verdict=$(sed -n 's/^{expect, \([a-z_]*\)}.*/\1/p' "$dir/fixture.config")
     heading=$page_name
-    prompt="<a href=\"$REPO_URL/blob/main/trials/ui/$label/prompt.txt\">today's ui prompt</a>, which describes how the page looks"
+    prompt="<a href=\"$REPO_URL/blob/main/trials/ui/$label/prompt.txt\">the second page prompt</a>, which describes how the page looks"
     [ "$round" = current ] ||
-        prompt="<a href=\"$REPO_URL/blob/main/trials/ui/$label/prompt.txt\">the first ui prompt</a>, which said what the page does but not how it looks"
+        prompt="<a href=\"$REPO_URL/blob/main/trials/ui/$label/prompt.txt\">the first page prompt</a>, which said what the page does but not how it looks"
     if grep -q '^{prompt_variant, guided}' "$dir/fixture.config"; then
         heading="$page_name, guided prompt"
         prompt="$prompt, in its guided form: one more paragraph on how to request media playback on an iPhone"
@@ -195,10 +228,10 @@ gallery_section() {
     for dir in $dirs; do grep -q '^{expect, pass}' "$dir/fixture.config" || gallery_entry "$dir" "$round"; done
 }
 
-gallery_section current "Today's prompt" \
-    "These pages answered the [ui prompt]($REPO_URL/blob/main/prompts/ui.txt) as it is now. It describes how the page looks as well as what it does, after the hand-written [demo](../pan/)."
-gallery_section earlier "The first prompt" \
-    "These pages answered the [first version of the prompt]($REPO_URL/blob/main/prompts/ui.first.txt), which said what the page does but not how it looks."
+gallery_section current "Second attempts {#second-attempts}" \
+    "In the second round, the [page prompt]($REPO_URL/blob/main/prompts/ui.txt) described how the hand-written [demo](../pan/) looked at the time, as well as what it does. The demo has since moved to the site’s colors."
+gallery_section earlier "First attempts {#first-attempts}" \
+    "In the first round, the [page prompt]($REPO_URL/blob/main/prompts/ui.first.txt) said what the page does, but not how it looks."
 pandoc --from gfm+attributes --to html5 --standalone \
     --template "$ROOT/site/template.html" --lua-filter "$ROOT/site/anchors.lua" \
     --metadata source="prompts/ui.txt" --metadata repo="$REPO_URL" \

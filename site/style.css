@@ -1,13 +1,14 @@
-/* wasm-bytes site. Visual language shared with erlang-dist and
-   enki-multimedia.eu: Archivo, the warm red-orange accent, pill navigation,
-   warm code blocks. Light by default, warm dark when the system asks. */
-@font-face{font-family:"Archivo";font-style:normal;font-weight:100 900;font-stretch:62% 125%;font-display:swap;src:url(archivo-latin.woff2) format("woff2")}
+/* wasm-bytes site pages. The top bar, the footer and the font are in
+   chrome.css, which the demo page shares. Visual language shared with
+   erlang-dist and enki-multimedia.eu: Archivo, the warm red-orange accent,
+   pill navigation, warm code blocks. Light by default, warm dark when the
+   system asks. */
 
 :root{
   color-scheme:light dark;
-  --ink:#000;--paper:#fff;--text:#3d3d3d;--muted:#555;--rule:#e2dcd8;--soft-rule:#f0ebe7;
-  --link:#b03a2e;--card:#fff;--card-edge:#eee4de;--chip:#f4eeea;--chip-text:#3a1d14;
-  --head-bg:rgba(255,255,255,0.95);--head-edge:#eee;--hover:#f3eeea;--tint:#fbf8f6;
+  --ink:#000;--paper:#f8f4f0;--text:#3d3d3d;--muted:#555;--rule:#e2d9d2;--soft-rule:#ebe3dc;
+  --link:#b03a2e;--card:#fff;--card-edge:#eadfd7;--chip:#efe6df;--chip-text:#3a1d14;
+  --head-bg:rgba(248,244,240,0.95);--head-edge:#e8dfd8;--hover:#efe6df;--tint:#f2ebe5;
   --warm:#2c1810;--warm-2:#3d1f1f;--warm-text:#f1ddd3;--foot:#2c1810;
   --grad:linear-gradient(90deg,#e74c3c,#ff8c42);
   --stripe:linear-gradient(90deg,#e74c3c,#ff6b6b,#ffa502);
@@ -28,20 +29,8 @@ a{color:var(--link);text-underline-offset:3px}
 a:hover{color:var(--ink)}
 :focus-visible{outline:3px solid #ff8c42;outline-offset:3px;border-radius:4px}
 .wrap{max-width:1100px;margin:0 auto;padding-left:max(20px,env(safe-area-inset-left,0px));padding-right:max(20px,env(safe-area-inset-right,0px))}
-.skip{position:absolute;left:-9999px;top:8px;background:var(--paper);color:var(--ink);padding:8px 14px;z-index:30;border-radius:6px}
-.skip:focus{left:12px}
 [id]{scroll-margin-top:84px}
 
-/* Header */
-.site-head{position:sticky;top:0;z-index:20;background:var(--head-bg);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-bottom:1px solid var(--head-edge)}
-.head-row{display:flex;align-items:center;justify-content:space-between;gap:8px 16px;min-height:64px;flex-wrap:wrap}
-.name{font-size:21px;font-weight:800;font-stretch:112%;letter-spacing:-0.01em;color:var(--ink);text-decoration:none}
-.name span{color:var(--link)}
-.head-nav{display:flex;gap:2px;flex-wrap:wrap}
-.head-nav a{color:var(--ink);text-decoration:none;font-weight:600;font-size:15px;padding:7px 11px;border-radius:999px;white-space:nowrap}
-.head-nav a:hover{background:var(--hover);color:var(--ink)}
-.head-nav a.demo{background:var(--ink);color:var(--paper)}
-.head-nav a.demo:hover{background:var(--link);color:#fff}
 
 /* Text */
 main{padding-top:40px;padding-bottom:64px}
@@ -127,8 +116,6 @@ details[open] summary{margin-bottom:10px}
 .outcome strong{display:block;font-size:13.5px;color:var(--muted);font-weight:600}
 .outcome code{background:none;padding:0;color:var(--ink);font-size:22px;font-weight:700}
 .caption{font-size:15px;color:var(--muted)}
-.reply pre{white-space:pre-wrap}
-.calls .outcome strong{font:600 16px/1.4 ui-monospace,"SF Mono",Menlo,Consolas,monospace;color:var(--ink);margin-bottom:4px}
 
 /* The findings at the top of the results page: each a plain sentence, the
    numbers that back it, and why it matters. */
@@ -175,20 +162,10 @@ details[open] summary{margin-bottom:10px}
 .credits{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 12px;padding:0;list-style:none}
 .credits li{margin:0;padding:4px 12px;border-radius:999px;background:var(--chip);color:var(--chip-text);font-size:14px;font-weight:600}
 
-/* Footer */
-.site-foot{padding:36px 0 48px;background:var(--foot);color:var(--warm-text);font-size:14.5px}
-.site-foot a{color:#fff}
-.site-foot a:hover{color:#ffb38a}
-.site-foot p{max-width:none;margin:0 0 10px}
-.attrib{display:flex;align-items:center;gap:10px}
-.attrib img{width:26px;height:26px;flex:none;border:0;border-radius:0}
 
 @media (max-width:640px){
   [id]{scroll-margin-top:118px}
   main{padding-top:28px}
-  .head-row{min-height:0;padding-top:10px;padding-bottom:8px}
-  .head-nav{flex-wrap:nowrap;overflow-x:auto;width:100%;margin:0 -6px;padding-bottom:2px;scrollbar-width:none}
-  .head-nav::-webkit-scrollbar{display:none}
   h2{margin-top:44px}
   .entry{padding:20px 16px 14px}
   .card{padding:14px 14px 12px 54px}
@@ -210,4 +187,4 @@ details[open] summary{margin-bottom:10px}
   .preview{height:640px}
 }
 @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}.anchor{transition:none}}
-@media print{.site-head{position:static}pre{background:#fff;color:#000;border:1px solid #999}.anchor{display:none}}
+@media print{pre{background:#fff;color:#000;border:1px solid #999}.anchor{display:none}}

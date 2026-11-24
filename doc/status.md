@@ -159,7 +159,7 @@ Every demo page the models wrote passed all 13 browser checks, except the local 
 
 The models wrote the whole DX-Ball demo page as one HTML file, in two rounds. A program drove each page in Chrome, first with the recorded sound programs and then with stand-ins, to confirm that the page really uses the model's Wasm and doesn't work out the sound itself. [How a page is checked](ui.md)
 
-In the first round, on 23 November 2026, the prompt said what the page does, not how it looks. In the second round, on 24 November, the prompt also described how the hand-written demo looks. All four pages in that round passed all 13 checks, and all four look close to the demo. The checks don't compare looks, so that was judged by eye. [The second round](ui.md#with-the-look-described) · [The prompt](../prompts/ui.txt)
+In the first round, on 23 November 2026, the prompt said what the page does, not how it looks. In the second round, on 24 November, the prompt also described how the hand-written demo looks. All four pages in that round passed all 13 checks, and all four look close to the demo as it looked then, before it moved to the site’s colors. The checks don't compare looks, so that was judged by eye. [The second round](ui.md#with-the-look-described) · [The prompt](../prompts/ui.txt)
 
 <details>
 <summary>Both rounds: page size and result, per model</summary>

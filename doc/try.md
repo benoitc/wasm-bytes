@@ -19,6 +19,23 @@ bin/wasm-bytes replay
       pass                validated, accepted by the interface rules, ran within its limits; 528 of 528 answers match the reference
 ```
 
+To check only Claude's 54-byte reply from the home page:
+
+```sh
+bin/wasm-bytes check write trials/write/claude-sonnet-5-5-1/reply.txt
+```
+
+```text
+  hex      54 bytes
+  wasm     decodes and validates (erlang_wasm 0.11.0)
+  profile  one function, exported as retry : (i32) -> (i32); no imports, memory or start
+  calls    528 inputs, each in a fresh instance; fuel 10000 and a 1000 ms deadline per call
+  answers  528 of 528 match the reference
+  verdict  pass
+```
+
+Read the last two lines first: all 528 answers were right, so the file passes. The lines above them say that erlang_wasm accepted the file, that it has the one function the prompt asked for and nothing else, and the limits each call ran under: a fresh start, a small budget of work and one second at most.
+
 ## Run the file with other tools
 
 The reply is the whole `.wasm` file, written as text. If you have `xxd` and [Wasmtime](https://wasmtime.dev/), you can turn the text back into a file and ask it about codes 429 and 404 yourself:

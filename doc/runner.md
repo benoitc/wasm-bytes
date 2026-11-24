@@ -28,7 +28,7 @@ Three commands follow a recorded reply past the verdict. `trace` shows a trial's
 <details>
 <summary>The commands, and what each one prints</summary>
 
-`trace` prints a trial's prompt as sent, its reply as received, and the module it decodes to, section by section. It also prints the module's SHA-256 and compares it with `module.sha256` in the trial directory. Add `--wasm FILE` to write the module to a file. `replay` is the short account in the README: one trace and five outcomes, each with the check that decided it.
+`trace` prints a trial's prompt as sent, its reply as received, and the module it decodes to, section by section. It also prints the module's SHA-256 and compares it with `module.sha256` in the trial directory. Add `--wasm FILE` to write the module to a file. `replay` is the short account: one trace and five outcomes, each with the check that decided it.
 
 ```sh
 bin/wasm-bytes trace trials/write/claude-sonnet-5-5-1

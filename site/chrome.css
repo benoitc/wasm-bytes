@@ -1,0 +1,52 @@
+/* The parts every wasm-bytes page shares: the font, the skip link, the top
+   bar and the footer. The site pages load it after style.css; the build
+   adds it, with the same top bar and footer from template.html, to the
+   hand-written demo, which keeps its own stylesheet for the rest. The
+   colors are set on these parts themselves, so a page's own colors don't
+   change them. */
+@font-face{font-family:"Archivo";font-style:normal;font-weight:100 900;font-stretch:62% 125%;font-display:swap;src:url(archivo-latin.woff2) format("woff2")}
+
+.skip,.site-head,.site-foot{
+  --ink:#000;--paper:#f8f4f0;--link:#b03a2e;--hover:#efe6df;
+  --head-bg:rgba(248,244,240,0.95);--head-edge:#e8dfd8;
+  --foot:#2c1810;--warm-text:#f1ddd3;
+  box-sizing:border-box;font-family:"Archivo",system-ui,-apple-system,"Segoe UI",sans-serif;line-height:1.6
+}
+@media (prefers-color-scheme:dark){
+  .skip,.site-head,.site-foot{
+    --ink:#fff4ec;--paper:#17110e;--link:#ff9a7a;--hover:#2a1f1a;
+    --head-bg:rgba(23,17,14,0.92);--head-edge:#2e231d;--foot:#0f0a08
+  }
+}
+.site-head *,.site-foot *{box-sizing:border-box}
+.site-head :focus-visible,.site-foot :focus-visible,.skip:focus-visible{outline:3px solid #ff8c42;outline-offset:3px;border-radius:4px}
+.site-head .wrap,.site-foot .wrap{max-width:1100px;margin:0 auto;padding-left:max(20px,env(safe-area-inset-left,0px));padding-right:max(20px,env(safe-area-inset-right,0px))}
+
+.skip{position:absolute;left:-9999px;top:8px;background:var(--paper);color:var(--ink);padding:8px 14px;z-index:30;border-radius:6px}
+.skip:focus{left:12px}
+
+/* Top bar */
+.site-head{position:sticky;top:0;z-index:20;background:var(--head-bg);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-bottom:1px solid var(--head-edge)}
+.head-row{display:flex;align-items:center;justify-content:space-between;gap:8px 16px;min-height:64px;flex-wrap:wrap}
+.name{font-size:21px;font-weight:800;font-stretch:112%;letter-spacing:-0.01em;color:var(--ink);text-decoration:none}
+.name span{color:var(--link)}
+.head-nav{display:flex;gap:2px;flex-wrap:wrap}
+.head-nav a{color:var(--ink);text-decoration:none;font-weight:600;font-size:15px;padding:7px 11px;border-radius:999px;white-space:nowrap}
+.head-nav a:hover{background:var(--hover);color:var(--ink)}
+.head-nav a.demo{background:var(--ink);color:var(--paper)}
+.head-nav a.demo:hover{background:var(--link);color:#fff}
+
+/* Footer */
+.site-foot{padding:36px 0 48px;background:var(--foot);color:var(--warm-text);font-size:14.5px}
+.site-foot a{color:#fff}
+.site-foot a:hover{color:#ffb38a}
+.site-foot p{max-width:none;margin:0 0 10px}
+.attrib{display:flex;align-items:center;gap:10px}
+.attrib img{width:26px;height:26px;flex:none;border:0;border-radius:0}
+
+@media (max-width:640px){
+  .head-row{min-height:0;padding-top:10px;padding-bottom:8px}
+  .head-nav{flex-wrap:nowrap;overflow-x:auto;width:100%;margin:0 -6px;padding-bottom:2px;scrollbar-width:none}
+  .head-nav::-webkit-scrollbar{display:none}
+}
+@media print{.site-head{position:static}}
