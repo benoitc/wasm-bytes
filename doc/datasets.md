@@ -1,6 +1,6 @@
 # Reading and writing WebAssembly
 
-The rest of this project asks a model to write small programs from descriptions we wrote ourselves. This page turns the question around and widens it. Can a model look at a compiled WebAssembly program and say what it will return? Can it write a working program for a problem it has never seen, taken from a public collection? Every right answer here comes from that collection, never from us. The README walks through the simplest example, 32-bit addition. [The addition example](../README.md#reading-and-writing-32-bit-addition)
+The rest of this project asks a model to write small programs from descriptions we wrote ourselves. This page turns the question around and widens it. Can a model look at a compiled WebAssembly program and say what it will return? Can it write a working program for a problem it has never seen, taken from a public collection? Every right answer here comes from that collection, never from us. Start with the simplest example, 32-bit addition. [One example of each](#one-example-of-each)
 
 ## What the model is asked
 
@@ -60,6 +60,71 @@ The rest of this project asks a model to write small programs from descriptions 
 </ol>
 </div>
 </div>
+
+## One example of each
+
+Both examples come from the same check in the WebAssembly test suite. Adding 1 to 2147483647, the largest signed 32-bit integer, wraps around to −2147483648.
+
+### Read the bytes, predict the answer
+
+This is the whole prompt. It doesn't name the operation, show source code, or give the answer. [The prompt as sent](../trials/cases/spec/read/add-41/claude-sonnet-5-5-1/prompt.txt)
+
+```text
+Here is a complete WebAssembly module, as hex: two hexadecimal digits for each byte.
+
+00 61 73 6d 01 00 00 00 01 07 01 60 02 7f 7f 01
+7f 03 02 01 00 07 05 01 01 66 00 00 0a 09 01 07
+00 20 00 20 01 6a 0b
+
+What signed integer does f(2147483647, 1) return? Reply with just the number.
+```
+
+The function `f` adds its two arguments. Sonnet replied with just `-2147483648`. Check that reply:
+
+```sh
+bin/wasm-bytes check case spec/read/add-41 trials/cases/spec/read/add-41/claude-sonnet-5-5-1/reply.txt
+```
+
+```text
+  call     f(2147483647, 1)
+  answer   -2147483648
+  expected -2147483648
+  verdict  pass
+```
+
+`pass` means the reply is that one number. A reply of `2147483648`, the same bits read as unsigned, gets `wrong_answer`. A sentence around the right number gets `malformed_answer`, because the checker reads nothing out of a longer reply. [Both failing examples](../examples/cases/spec/read/add-41/)
+
+### Write bytes that pass the tests
+
+The model gets one sentence, then the rules for formatting the reply: "Write a complete WebAssembly module that exports f(i32, i32) -> i32. It adds its two arguments, wrapping on 32-bit overflow. Reply with the complete file as hex." Sonnet sent back 39 bytes. Check them:
+
+```sh
+bin/wasm-bytes check case spec/write/add trials/cases/spec/write/add/claude-sonnet-5-5-1/reply.txt
+```
+
+```text
+  hex      39 bytes
+  wasm     decodes and validates (erlang_wasm 0.11.0)
+  profile  exports f : (i32, i32) -> (i32); no imports
+  calls    8 inputs, each in a fresh instance; fuel 10000 and a 1000 ms deadline per call
+  answers  8 of 8 match the reference
+  verdict  pass
+```
+
+erlang_wasm validated the file, then the runner called `f` on the 8 inputs the test suite checks for addition, the overflow included. `pass` means every call returned the expected value. Any file that does so passes, whatever its bytes. These 39 happen to equal the file in the reading prompt, although the writing prompt never showed it. [The prompt as sent](../trials/cases/spec/write/add/claude-sonnet-5-5-1/prompt.txt) · [The unedited reply](../trials/cases/spec/write/add/claude-sonnet-5-5-1/reply.txt)
+
+A valid file can still give wrong answers. This hand-written reply is the same file with one byte changed: `6a` (add) became `6b` (subtract). It decodes, validates and runs, and the check names the first input where it goes wrong.
+
+```sh
+bin/wasm-bytes check case spec/write/add examples/cases/spec/write/add/subtracts/reply.txt
+```
+
+```text
+  wrong    6 answers differ from the reference
+  first    input (1, 1): expected 2, got 0
+  answers  2 of 8 match the reference
+  verdict  wrong_answer
+```
 
 ## Where the questions come from
 
