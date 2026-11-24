@@ -11,7 +11,7 @@ case_test_() ->
      fun() -> {ok, Apps} = application:ensure_all_started(wasm), Apps end,
      fun(_) -> ok end,
      [{"a call can take two arguments", fun two_arguments/0},
-      {"the runner's add module is the 39 bytes the README shows", fun add_module/0},
+      {"the runner's add module is the 39 bytes the reading guide shows", fun add_module/0},
       {"a reading reply is one signed integer and nothing else", fun read_answer/0},
       {"the spec source gives 374 assertions, 364 usable", fun spec_counts/0},
       {"the spec sample is what prepare writes for its seed", fun spec_reproduces/0},

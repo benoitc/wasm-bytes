@@ -65,7 +65,7 @@ h2:hover .anchor,h3:hover .anchor,h4:hover .anchor,.anchor:focus-visible{opacity
 /* Code */
 pre{margin:0 0 18px;background:linear-gradient(135deg,var(--warm),var(--warm-2));color:var(--warm-text);border-radius:10px;padding:16px 18px;overflow-x:auto;font-size:14.5px;line-height:1.55}
 code{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
-pre code{background:none;color:inherit;padding:0;font-size:inherit}
+pre code,li pre code{background:none;color:inherit;padding:0;font-size:inherit}
 p code,li code,td code,th code,h2 code,h3 code,summary code{background:var(--chip);color:var(--chip-text);padding:1px 6px;border-radius:5px;font-size:0.88em}
 pre a{color:inherit;text-decoration:none}
 pre .co{color:#c9a596;font-style:italic}
@@ -127,6 +127,8 @@ details[open] summary{margin-bottom:10px}
 .outcome strong{display:block;font-size:13.5px;color:var(--muted);font-weight:600}
 .outcome code{background:none;padding:0;color:var(--ink);font-size:22px;font-weight:700}
 .caption{font-size:15px;color:var(--muted)}
+.reply pre{white-space:pre-wrap}
+.calls .outcome strong{font:600 16px/1.4 ui-monospace,"SF Mono",Menlo,Consolas,monospace;color:var(--ink);margin-bottom:4px}
 
 /* The findings at the top of the results page: each a plain sentence, the
    numbers that back it, and why it matters. */
@@ -137,6 +139,26 @@ details[open] summary{margin-bottom:10px}
 .finding p{margin:0 0 10px;max-width:none;font-size:15.5px}
 .finding .evidence{font-weight:700;color:var(--link);font-size:15px}
 .finding .refs{font-size:14.5px;margin:0}
+
+/* The scoreboard on the results page: the headline numbers as tiles, one
+   bar per kind of question (the track is a lighter step of the bar's own
+   hue), and pass or fail marks that always come with a word. */
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:12px 0 8px}
+.kpi{padding:16px 18px 14px;background:var(--card);border-radius:14px;box-shadow:0 1px 2px rgba(60,20,10,0.06),inset 0 0 0 1px var(--card-edge)}
+.kpi p{margin:0;max-width:none}
+.kpi-label{font-size:14.5px;font-weight:600;color:var(--ink);line-height:1.3}
+.kpi p.kpi-value{margin:6px 0 8px;font-size:40px;font-weight:650;font-stretch:108%;line-height:1.05;letter-spacing:-0.02em;color:var(--ink)}
+.kpi-note{font-size:14px;color:var(--muted);line-height:1.4}
+.meters{margin:10px 0 18px;max-width:860px}
+.meter{display:grid;grid-template-columns:minmax(0,1fr) minmax(120px,240px) 92px;align-items:center;gap:6px 16px;padding:11px 0;border-bottom:1px solid var(--soft-rule)}
+.meter-name{font-size:15.5px;font-weight:600;color:var(--ink);line-height:1.35}
+.meter-bar{display:block;height:12px;background:var(--chip);border-radius:0 4px 4px 0}
+.meter-bar span{display:block;height:100%;background:var(--link);border-radius:0 4px 4px 0}
+.meter-fig{font-size:15.5px;color:var(--text);text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.ok,.no{font-weight:800}
+.ok{color:#0ca30c}
+.no{color:#d03b3b}
+@media (max-width:900px){.kpis{grid-template-columns:1fr 1fr}}
 
 /* Two flows side by side, such as reading and writing a case. */
 .flow-pair{display:grid;grid-template-columns:1fr 1fr;gap:0 24px;align-items:start}
@@ -179,6 +201,10 @@ details[open] summary{margin-bottom:10px}
   .play{flex-direction:column}
   .flow-pair{grid-template-columns:1fr}
   .findings{grid-template-columns:1fr}
+  .kpi{padding:14px 14px 12px}
+  .kpi p.kpi-value{font-size:32px}
+  .meter{grid-template-columns:minmax(0,1fr) auto}
+  .meter-name{grid-column:1/-1}
   .play li+li{margin:26px 0 0}
   .play li+li::before{content:"↓";left:18px;top:-24px;transform:none}
   .preview{height:640px}

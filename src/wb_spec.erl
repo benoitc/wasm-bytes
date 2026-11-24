@@ -21,7 +21,7 @@
 -define(LOCAL, "datasets/spec/i32.wast").
 -define(SHA256, "f3b7e8fd641893ea0989a8ab801fce0654d276d27b5cad9cf482291a422cffe8").
 
-%% The walkthrough in the README: 32-bit addition, in both directions.
+%% The example in doc/datasets.md: 32-bit addition, in both directions.
 -define(EXAMPLE_READ, <<"add-41">>).
 -define(EXAMPLE_WRITE, <<"add">>).
 

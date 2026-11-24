@@ -2,7 +2,7 @@
 
 A check tells you how far a reply got, from hex text to a module that runs, and, on a pass, that the module gave the expected answer for every input the checker tried. It does not tell you how the module behaves on other inputs, or how often a model would succeed. For a `ui` page, a pass means all 13 browser checks passed; those checks record what the page asks the browser to play, not what reaches a speaker.
 
-`bin/wasm-bytes check` prints the stages a reply reached. Read the final `verdict` and the diagnostic above it. A reply can decode into valid WebAssembly and still give the wrong answer. [Walk through a check](../README.md)
+`bin/wasm-bytes check` prints the stages a reply reached. Read the final `verdict` and the diagnostic above it. A reply can decode into valid WebAssembly and still give the wrong answer. [Check a reply yourself](try.md)
 
 | Verdict | What it means | Where to look |
 | --- | --- | --- |

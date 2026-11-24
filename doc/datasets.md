@@ -1,6 +1,6 @@
 # Reading and writing WebAssembly
 
-The rest of this project asks a model to write small programs from descriptions we wrote ourselves. This page turns the question around and widens it. Can a model look at a compiled WebAssembly program and say what it will return? Can it write a working program for a problem it has never seen, taken from a public collection? Every right answer here comes from that collection, never from us. The README walks through the simplest example, 32-bit addition. [The addition example](../README.md#reading-and-writing-32-bit-addition)
+The rest of this project asks a model to write small programs from descriptions we wrote ourselves. This page turns the question around and widens it. Can a model look at a compiled WebAssembly program and say what it will return? Can it write a working program for a problem it has never seen, taken from a public collection? Every right answer here comes from that collection, never from us. Start with the simplest example, 32-bit addition. [One example of each](#one-example-of-each)
 
 ## What the model is asked
 
@@ -61,6 +61,71 @@ The rest of this project asks a model to write small programs from descriptions 
 </div>
 </div>
 
+## One example of each
+
+Both examples use the same fact from the official WebAssembly tests. Wasm stores these numbers in 32 bits, so the largest is 2147483647. Add 1 to it and the result wraps around to the smallest, −2147483648.
+
+### Read the bytes, predict the answer
+
+This is everything the model sees. Nothing in it names the operation, shows the code, or gives the answer. [The prompt as sent](../trials/cases/spec/read/add-41/claude-sonnet-5-5-1/prompt.txt)
+
+```text
+Here is a complete WebAssembly module, as hex: two hexadecimal digits for each byte.
+
+00 61 73 6d 01 00 00 00 01 07 01 60 02 7f 7f 01
+7f 03 02 01 00 07 05 01 01 66 00 00 0a 09 01 07
+00 20 00 20 01 6a 0b
+
+What signed integer does f(2147483647, 1) return? Reply with just the number.
+```
+
+The file's function, `f`, adds its two numbers. Sonnet replied with just `-2147483648`. To check that reply yourself:
+
+```sh
+bin/wasm-bytes check case spec/read/add-41 trials/cases/spec/read/add-41/claude-sonnet-5-5-1/reply.txt
+```
+
+```text
+  call     f(2147483647, 1)
+  answer   -2147483648
+  expected -2147483648
+  verdict  pass
+```
+
+`pass` means the reply is exactly the right number. A reply of `2147483648`, the same bits read as a number that can't be negative, gets `wrong_answer`. A sentence around the right number gets `malformed_answer`, because the checker accepts the number alone and nothing else. [Both failing examples](../examples/cases/spec/read/add-41/)
+
+### Write bytes that pass the tests
+
+The model gets one sentence, followed by the same formatting rules as every writing task: "Write a complete WebAssembly module that exports f(i32, i32) -> i32. It adds its two arguments, wrapping on 32-bit overflow. Reply with the complete file as hex." Sonnet sent back 39 bytes. To check them yourself:
+
+```sh
+bin/wasm-bytes check case spec/write/add trials/cases/spec/write/add/claude-sonnet-5-5-1/reply.txt
+```
+
+```text
+  hex      39 bytes
+  wasm     decodes and validates (erlang_wasm 0.11.0)
+  profile  exports f : (i32, i32) -> (i32); no imports
+  calls    8 inputs, each in a fresh instance; fuel 10000 and a 1000 ms deadline per call
+  answers  8 of 8 match the reference
+  verdict  pass
+```
+
+erlang_wasm confirmed that the file follows the rules of Wasm. Then the checker called `f` with the 8 pairs of numbers the official tests use for addition, including the one that wraps around. `pass` means every call gave the expected answer. Any file that does so passes, however its bytes are written. These 39 bytes happen to be the same as the file in the reading example, although the model never saw that file. [The prompt as sent](../trials/cases/spec/write/add/claude-sonnet-5-5-1/prompt.txt) · [The unedited reply](../trials/cases/spec/write/add/claude-sonnet-5-5-1/reply.txt)
+
+A file can follow every rule and still give wrong answers. This example reply is the same file with one byte changed: `6a` (add) became `6b` (subtract). It still runs, and the check shows you the first numbers where it goes wrong.
+
+```sh
+bin/wasm-bytes check case spec/write/add examples/cases/spec/write/add/subtracts/reply.txt
+```
+
+```text
+  wrong    6 answers differ from the reference
+  first    input (1, 1): expected 2, got 0
+  answers  2 of 8 match the reference
+  verdict  wrong_answer
+```
+
 ## Where the questions come from
 
 **The WebAssembly test suite.** These are the tests the people who write the WebAssembly standard use to check that engines agree with each other. Each one says, for example, "calling `i32.add` with 2147483647 and 1 must give −2147483648". We use the file for 32-bit integer arithmetic, comparisons, and bit operations. For a reading question, we build a tiny program that runs one instruction and ask about one test. For a writing task, we describe the instruction in a sentence, and every test for it becomes a check.
@@ -86,7 +151,7 @@ We sent the questions to Claude Sonnet 5.5, one attempt each, in two rounds on 2
 
 **Writing a single instruction was easy, and a contest problem was hard.** 30 of the 31 instruction programs passed. The one miss, bitwise AND, had passed in the sample run, so the same task can go either way from one attempt to the next. 7 of the 12 contest problems passed: every problem rated 7 to 9 on the dataset's scale, 2 of the 6 rated 10 to 12, and one of the two unrated AtCoder problems. Of the 5 failures, 2 replies are not valid WebAssembly, because the file ends before a section it declares. One fails validation, one is too slow on a large input, and one crashes on the input −27. That last problem only allows inputs from 1 to 32, but some of the dataset's generated tests go outside a problem's own limits.
 
-These numbers describe one model and one attempt per question. They tell you what happened on these questions, not how often a model succeeds in general. [All results](status.md#reading-and-writing-tracks)
+These numbers describe one model and one attempt per question. They tell you what happened on these questions, not how often a model succeeds in general. [All results](status.md#reading-and-writing-at-scale)
 
 ## How it scales
 
