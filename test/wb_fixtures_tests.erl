@@ -48,7 +48,13 @@ labelled() ->
          Got = case Task of
                    ui ->
                        case wb_ui:check(root(), Reply) of
-                           {ok, #{verdict := V}} -> V;
+                           {ok, #{verdict := V} = R} ->
+                               %% A trial that names the checks it failed, for
+                               %% the site, must fail exactly those.
+                               [?assertEqual({Label, lists:sort(Names)},
+                                             {Label, lists:sort([N || {N, false, _} <- maps:get(checks, R, [])])})
+                                || {ok, Names} <- [maps:find(failed_checks, C)]],
+                               V;
                            {error, {missing, _}} -> Expect      % no browser here
                        end;
                    _ ->
@@ -62,7 +68,7 @@ labelled() ->
                        end
                end,
          ?assertEqual({Label, Expect}, {Label, Got})
-     end || #{task := Task, label := Label, reply := Reply, config := #{expect := Expect}} = F
+     end || #{task := Task, label := Label, reply := Reply, config := #{expect := Expect} = C} = F
                 <- wb_fixture:all(root())].
 
 provenance() ->

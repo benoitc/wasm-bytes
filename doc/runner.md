@@ -1,5 +1,7 @@
 # How to read a check
 
+A check tells you how far a reply got, from hex text to a module that runs, and, on a pass, that the module gave the expected answer for every input the checker tried. It does not tell you how the module behaves on other inputs, or how often a model would succeed. For a `ui` page, a pass means all 13 browser checks passed; those checks record what the page asks the browser to play, not what reaches a speaker.
+
 `bin/wasm-bytes check` prints the stages a reply reached. Read the final `verdict` and the diagnostic above it. A reply can decode into valid WebAssembly and still give the wrong answer. [Walk through a check](../README.md)
 
 | Verdict | What it means | Where to look |
@@ -20,7 +22,12 @@ For scripts, `check` exits with 0 on a pass, 1 for a failed reply or refused rev
 
 ## Trace, replay, and compare
 
-Three commands follow a recorded reply past the verdict. `trace` prints a trial's prompt as sent, its reply as received, and the module it decodes to, section by section. It also prints the module's SHA-256 and compares it with `module.sha256` in the trial directory. Add `--wasm FILE` to write the module to a file. `replay` is the short account in the README: one trace and five outcomes, each with the check that decided it. [Evidence for each claim](evidence.md)
+Three commands follow a recorded reply past the verdict. `trace` shows a trial's prompt, its reply, and the module the reply decodes to. `replay` shows which check decided each of five outcomes, and `compare` tells you whether a second engine, Wasmtime, gives the same answers as erlang_wasm and the reference. [Evidence for each claim](evidence.md)
+
+<details>
+<summary>The commands, and what each one prints</summary>
+
+`trace` prints a trial's prompt as sent, its reply as received, and the module it decodes to, section by section. It also prints the module's SHA-256 and compares it with `module.sha256` in the trial directory. Add `--wasm FILE` to write the module to a file. `replay` is the short account in the README: one trace and five outcomes, each with the check that decided it.
 
 ```sh
 bin/wasm-bytes trace trials/write/claude-sonnet-5-5-1
@@ -30,6 +37,11 @@ bin/wasm-bytes compare write trials/write/claude-sonnet-5-5-1/reply.txt
 
 `compare` runs a reply in erlang_wasm and in Wasmtime on the same inputs. It reports the hash of the bytes each engine received, how many answers match the reference, and the first input where an engine and the reference disagree. Add `--record DIR` to save the result with the host and runtime versions. Only `compare` needs Wasmtime. Install it, or set `WASMTIME` to its path.
 
+</details>
+
+<details>
+<summary>What each compare verdict means, and its exit codes</summary>
+
 | Verdict | What it means |
 | --- | --- |
 | `pass` | Both engines gave the reference answer on every input. |
@@ -38,7 +50,11 @@ bin/wasm-bytes compare write trials/write/claude-sonnet-5-5-1/reply.txt
 
 `compare` exits with 0 on `pass`, 1 on either other verdict, and 2 when Wasmtime is missing or the reply is not hex.
 
+</details>
+
 ## What a pass covers
+
+A pass covers only the inputs the checker tried: 528 for `retry`, 1,353 for `digit_sum`, and 641 screen positions for `screen_pan`, checked against the rule REA published, not against the original game.
 
 For `retry`, the checker calls the function on every status from 100 through 599, plus 28 other integers. These include negative numbers, 32-bit boundaries, and numbers whose low bits match a status of interest. For `screen_pan`, the DX-Ball task, it makes 641 calls, one for every screen position from 0 through 640. For `digit_sum`, it makes 1,353 calls. They cover 0 through 1000, −1 through −100, powers of ten and their neighbours, the 32-bit limits, and 200 numbers spread over the whole range. Each answer is compared with a reference function written in Erlang from the task description. [Test inputs and reference functions](../src/wb_task.erl)
 

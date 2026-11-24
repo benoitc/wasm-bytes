@@ -50,16 +50,8 @@
 <body>
 <main>
   <h1>Claude wrote DX-Ball’s sound rule byte by byte</h1>
-  <p><strong>Does this demo use REA?</strong> Only its published findings. The REA team
-  used the tool to inspect the old game and work out how it turned a brick’s position into
-  a number for the sound system. We put that rule in a prompt. Claude wrote two small
-  programs, one for the original rule and one for reversed stereo.</p>
-  <p>Your browser runs those saved programs locally. You can use this demo without installing
-  REA or connecting to Claude.</p>
-  <p>Turn <strong>Sound</strong> on and watch the ball move from left to right.
-  In <strong>Original</strong>, the beep follows the ball. Switch to <strong>Reversed</strong>
-  and the beep moves the other way. With sound off, follow the marker below the ball.</p>
-  <p><a href="https://github.com/benoitc/wasm-bytes/blob/main/doc/dx-ball.md">Read the DX-Ball demo guide</a> for the prompts, replies, and test results.</p>
+  <p>Turn <strong>Sound</strong> on. Watch the ball reach the right edge.
+  Now select <strong>Reversed</strong>. <a href="https://benoitc.github.io/wasm-bytes/doc/dx-ball.html">Read the full guide</a></p>
 
   <div class="controls">
     <button id="sound" aria-pressed="false">Sound: off</button>
@@ -80,13 +72,22 @@
   </div>
   <div class="meter" aria-hidden="true"><div class="mark" id="mark"></div></div>
   <div class="meter-labels"><span>left</span><span>stereo position sent to the speakers</span><span>right</span></div>
+  <p class="muted">Press <strong>Pause</strong> with the ball near the right edge, then switch
+  between <strong>Original</strong> and <strong>Reversed</strong>. At the same position, the
+  answer changes sign: 500 sends the beep right, −500 sends it left.</p>
 
   <h2>What changes when you switch?</h2>
   <p>The switch selects which WebAssembly program the browser calls for the next sound.
-  Try pressing <strong>Pause</strong> with the ball near one edge. Switch versions and watch
-  the number change sign. At the right edge, the original program returns <strong>500</strong>
-  (right speaker) and the revised one returns <strong>−500</strong> (left speaker).
   The browser uses the same ball position and the same beep for both.</p>
+
+  <h2>Where the two programs came from</h2>
+  <p>REA’s team inspected the old game and published how it turns a brick’s position into
+  a number for its sound system. We used that calculation to write a prompt, and Claude
+  Sonnet wrote two small WebAssembly programs, byte by byte: one for the original rule and
+  one for reversed stereo.</p>
+  <p>Your browser runs those two saved files locally. You can play this demo without REA,
+  Claude, or the original game. <a href="https://benoitc.github.io/wasm-bytes/doc/dx-ball.html">Read the full guide</a>
+  for the prompts, replies, and test results.</p>
 
   <details>
     <summary>Inspect the two files this page loaded</summary>

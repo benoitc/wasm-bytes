@@ -1,6 +1,6 @@
 # Evidence for the three claims
 
-This page records what was run to support three claims about one recorded reply. Each section gives the command that repeats a run and the files that preserve it. Read it to check a claim yourself, or to see what was verified and on which hosts. The claims are traced through one function, `retry`, and its recorded attempts under `trials/`. The `digit_sum` trials have run records too. The runs below were recorded on 23 November 2026. [Project status](status.md) · [How a check works](runner.md)
+This page records what was run to support three claims about one recorded reply, Sonnet's `retry` module. In short: the model wrote every byte, erlang_wasm validated the module and it gave the expected answer for all 528 tested inputs under explicit limits, and Wasmtime gave the same 528 answers on three host configurations of one Mac. Read it to check a claim yourself, or to see what was verified and on which hosts. Each section opens with what was shown, then gives the command that repeats a run and the files that preserve it. Commands, their output, and host details are in collapsed sections. The claims are traced through one function, `retry`, and its recorded attempts under `trials/`. The `digit_sum` trials have run records too. The runs below were recorded on 23 November 2026. [Project status](status.md) · [How a check works](runner.md)
 
 1. A language model supplied the executable bytes directly.
 2. erlang_wasm validates and runs those bytes under explicit limits.
@@ -8,7 +8,14 @@ This page records what was run to support three claims about one recorded reply.
 
 ## 1. The model supplied the bytes
 
-Claude Sonnet 5.5 received the write prompt and returned 161 bytes of text: hex pairs, spaces, and line breaks. They decode to a 54-byte module. Run this to see the prompt as sent, the reply as received, and the module section by section:
+Sonnet's reply decodes to a 54-byte module with nothing added or changed: every byte, including every section length, came from the model. The module returns 1 when `x == 429`, or when `x - 500` is below 100 as an unsigned comparison.
+
+Claude Sonnet 5.5 received the write prompt and returned 161 bytes of text: hex pairs, spaces, and line breaks. They decode to a 54-byte module. Every section length in it came from the model. The runner decodes hex pairs and refuses anything else. It never adds a byte or recomputes a length. [Hex decoder](../src/wb_hex.erl)
+
+<details>
+<summary>The trace command and the module it prints, section by section</summary>
+
+Run this to see the prompt as sent, the reply as received, and the module section by section:
 
 ```sh
 bin/wasm-bytes trace trials/write/claude-sonnet-5-5-1
@@ -33,7 +40,10 @@ Module: the 54 bytes the hex decodes to, nothing added or changed
   recorded   module.sha256 holds the same hash
 ```
 
-Every section length in that table came from the model. The runner decodes hex pairs and refuses anything else. It never adds a byte or recomputes a length. [Hex decoder](../src/wb_hex.erl)
+</details>
+
+<details>
+<summary>Check the hash without the runner</summary>
 
 To check the hash without the runner, decode the reply with `xxd` and compare it with the recorded hash. This prints `module.wasm: OK`.
 
@@ -41,6 +51,11 @@ To check the hash without the runner, decode the reply with `xxd` and compare it
 xxd -r -p trials/write/claude-sonnet-5-5-1/reply.txt > module.wasm
 shasum -a 256 -c trials/write/claude-sonnet-5-5-1/module.sha256
 ```
+
+</details>
+
+<details>
+<summary>The same bytes as WebAssembly text</summary>
 
 `wasm-tools print` (version 1.256.0) reads the same bytes as the program below: `x == 429`, or `x - 500` below 100 as an unsigned comparison.
 
@@ -62,11 +77,18 @@ shasum -a 256 -c trials/write/claude-sonnet-5-5-1/module.sha256
 )
 ```
 
+</details>
+
 The trial directory preserves the rest of the attempt. `prompt.txt` is byte for byte the output of `bin/wasm-bytes prompt write`, and a test keeps it that way. `reply.txt` is the `result` field that the Claude Code CLI returned, unedited. `response.json` records `claude-sonnet-5-5` as the model the API reported, one turn, and an empty tool list. [Trial files](../trials/write/claude-sonnet-5-5-1/)
 
 **Read this with three limits in mind.** It is one sample. The model was reached through Claude Code with tools, MCP servers, and settings off and a replacement system prompt, but Claude Code still added about 650 tokens of its own context. The same 54 bytes also appear in two other places: in the recorded Opus 5.5 reply, and in `examples/write/accepted`. That example was written by Opus 5.5 while the checker was being built. Both trials produced this encoding in recorded runs with no tools, so they did not copy it. The match does mean the example is not independent of the Opus trial.
 
 ## 2. erlang_wasm validates and runs them under limits
+
+Four constructed replies were each caught by a different protection: erlang_wasm's validator, the checker's interface rules, erlang_wasm's fuel limit, and the checker's reference answers. Sonnet's reply got past all of them and gave the expected answer for all 528 tested inputs.
+
+<details>
+<summary>The replay command, and which protection decided each reply</summary>
 
 Run this to check five replies and see which protection decided each outcome. Four are examples constructed to trigger one protection each. The fifth is the recorded model reply.
 
@@ -82,9 +104,16 @@ bin/wasm-bytes replay
 | [misses-599](../examples/write/misses-599/) | constructed | `wrong_answer` | Not erlang_wasm: the module is legal and every call returns within its limits. The checker's reference function finds that input 599 returns 0 instead of 1. |
 | [Sonnet's reply](../trials/write/claude-sonnet-5-5-1/) | model trial | `pass` | All of the above. 528 of 528 answers match the reference. |
 
+</details>
+
 The limits come from two places. erlang_wasm provides the validator, the fuel budget, and a worker process with a deadline. The checker configures them: 10,000 fuel and 1,000 ms per call, with a fresh instance for every call. The checker adds its own rules: a 4,096-byte size cap, the interface rules, and the reference answers. Because the profile allows no imports, the module has no host function through which it could reach a file or a socket. The replay does not reach a deadline, because fuel stops these loops first. A test covers the deadline path. [Execution limits](../src/wb_exec.erl) · [Interface rules](../src/wb_profile.erl) · [Deadline test](../test/wb_exec_tests.erl)
 
 ## 3. The same bytes in another engine and on other hosts
+
+A second engine, Wasmtime, received the same 54 bytes and, like erlang_wasm, gave the reference answer for all 528 tested inputs. This held on three host configurations of one Apple silicon Mac: macOS, Linux on the native CPU, and Linux with x86_64 emulated. The nine `digit_sum` runs also gave the reference answer for all 1,353 tested inputs.
+
+<details>
+<summary>The compare command and what it prints</summary>
 
 Run this to call the module in erlang_wasm and in Wasmtime on all 528 inputs and compare both with the reference. It needs Wasmtime on your `PATH`, or its path in `WASMTIME`. Nothing else in wasm-bytes needs Wasmtime.
 
@@ -105,6 +134,11 @@ bin/wasm-bytes compare write trials/write/claude-sonnet-5-5-1/reply.txt
 
 Each engine hashes the bytes it received. erlang_wasm hashes the bytes passed to `wasm:compile/1`. Wasmtime's hash is computed from the `module.wasm` file read back from disk. Wasmtime runs as `wasmtime run -W fuel=10000 -W timeout=1s --invoke retry module.wasm <input>`, once per input. Its fuel units are not the same as erlang_wasm's, so the two budgets only bound each engine. They do not measure the same work. When a result differs, `first diff` shows the input, the reference answer, and both engines' results. [Comparison](../src/wb_compare.erl)
 
+</details>
+
+<details>
+<summary>Versions, hashes, and run records for each host</summary>
+
 The same command ran on three host configurations. Each run wrote a record with the host, runtimes, module hash, and result:
 
 | Host | How it ran | erlang_wasm | Wasmtime | Module SHA-256 | Result | Record |
@@ -112,6 +146,13 @@ The same command ran on three host configurations. Each run wrote a record with 
 | macOS 27.2, arm64 | directly on an Apple silicon Mac | 0.11.0, OTP 29.1.2: 528 of 528 | 50.0.1: 528 of 528 | `5085ed49…dee7` | `pass` | [darwin-arm64](../evidence/runs/write-claude-sonnet-5-5-1/darwin-arm64.config) |
 | Debian 13, aarch64 | Linux container on the same Mac, native CPU | 0.11.0, OTP 29.1.2: 528 of 528 | 50.0.1: 528 of 528 | `5085ed49…dee7` | `pass` | [linux-aarch64](../evidence/runs/write-claude-sonnet-5-5-1/linux-aarch64.config) |
 | Debian 13, x86_64 | Linux container on the same Mac, x86_64 emulated by OrbStack | 0.11.0, OTP 29.1.2: 528 of 528 | 50.0.1: 528 of 528 | `5085ed49…dee7` | `pass` | [linux-x86_64](../evidence/runs/write-claude-sonnet-5-5-1/linux-x86_64.config) |
+
+The three `digit_sum` trials ran the same way, with `compare digits`, on the same three host configurations. All nine runs passed on 1,353 of 1,353 inputs. [Records](../evidence/runs/)
+
+</details>
+
+<details>
+<summary>Repeat the Linux runs with Docker</summary>
 
 To repeat the Linux runs, use Docker. The script builds an image with Erlang/OTP 29 and the Wasmtime release, and copies the repository into the container. It writes the record to `evidence/runs/<task>-<label>/`. Set `TASK` and `REPLY` to run another trial, for example `TASK=digits REPLY=trials/digits/claude-haiku-5-5-1/reply.txt`.
 
@@ -122,7 +163,7 @@ scripts/platform-check.sh linux/amd64
 
 On an arm64 host, the `linux/amd64` run is emulated. Under emulation the Erlang VM does not boot with its default JIT memory mapping, so the script starts it with `+JMsingle true`. The flag changes how the VM maps its own code. It does not change how either engine runs the module. The record notes the flag. [Platform script](../scripts/platform-check.sh)
 
-The three `digit_sum` trials ran the same way, with `compare digits`, on the same three host configurations. All nine runs passed on 1,353 of 1,353 inputs. [Records](../evidence/runs/)
+</details>
 
 **What these runs establish.** On one Mac, erlang_wasm and Wasmtime gave the reference answer on all 528 inputs for the same 54 bytes. The same held on a second operating system, Linux, and with the x86_64 builds of both engines. The two engines also agree on the constructed failures, for example at input 599 and on fuel exhaustion. Run `compare` on any reply under `examples/` to see the first discrepancy.
 
