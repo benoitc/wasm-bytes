@@ -1,5 +1,6 @@
 %% Calls a candidate's export on every input, in a fresh worker with fuel and a
-%% deadline.
+%% deadline. An input is one integer, for a one-argument function, or the
+%% list of arguments, such as `[2147483647, 1]' for `f(i32, i32)'.
 %%
 %% Each candidate gets its own `wasm_instance_worker', with `isolation => fresh'
 %% so that no state survives from one call to the next. Every call has a fuel
@@ -12,7 +13,7 @@
 
 -export([run/3, run/4, limits/0]).
 
--export_type([outcome/0]).
+-export_type([outcome/0, input/0]).
 
 %% The reference implementation uses about 20 instructions; 10,000 leaves a
 %% candidate written very differently plenty of room.
@@ -20,6 +21,7 @@
 -define(DEADLINE_MS, 1_000).
 -define(MAX_TIMEOUTS, 3).
 
+-type input() :: integer() | [integer()].
 -type outcome() :: {ok, integer()}
                  | {error, wasm_error:error() | map()}
                  | not_run.
@@ -28,15 +30,15 @@
 limits() ->
     #{fuel => ?FUEL, deadline_ms => ?DEADLINE_MS}.
 
--spec run(wasm:module_(), binary(), [integer()]) ->
-          {ok, [{integer(), outcome()}]} | {error, {instantiate, term()}}.
+-spec run(wasm:module_(), binary(), [input()]) ->
+          {ok, [{input(), outcome()}]} | {error, {instantiate, term()}}.
 run(Module, Export, Inputs) ->
     run(Module, Export, Inputs, #{}).
 
 %% `Opts' may override `fuel' and `deadline_ms'; the tests use it to reach the
 %% deadline path.
--spec run(wasm:module_(), binary(), [integer()], map()) ->
-          {ok, [{integer(), outcome()}]} | {error, {instantiate, term()}}.
+-spec run(wasm:module_(), binary(), [input()], map()) ->
+          {ok, [{input(), outcome()}]} | {error, {instantiate, term()}}.
 run(Module, Export, Inputs, Opts) ->
     Cfg = maps:merge(limits(), Opts),
     Parent = self(),
@@ -103,7 +105,7 @@ stop(W) ->
 loop([], W, _Export, _Cfg, _Timeouts, Acc) ->
     {lists:reverse(Acc), W};
 loop([X | Rest], W, Export, #{deadline_ms := Deadline} = Cfg, Timeouts, Acc) ->
-    case wasm_instance_worker:call(W, Export, [X], Deadline) of
+    case wasm_instance_worker:call(W, Export, args(X), Deadline) of
         {ok, [V]} ->
             loop(Rest, W, Export, Cfg, Timeouts, [{X, {ok, V}} | Acc]);
         {ok, Other} ->
@@ -124,6 +126,9 @@ restart(Rest, Export, #{module := Module} = Cfg, Timeouts, Acc) ->
         {ok, W} -> loop(Rest, W, Export, Cfg, Timeouts, Acc);
         {error, _} -> {lists:reverse(Acc, [{X, not_run} || X <- Rest]), none}
     end.
+
+args(Args) when is_list(Args) -> Args;
+args(X) -> [X].
 
 flush_exits() ->
     receive

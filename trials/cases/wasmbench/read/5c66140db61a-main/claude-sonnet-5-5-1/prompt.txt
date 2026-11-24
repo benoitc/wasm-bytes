@@ -1,0 +1,9 @@
+Here is a complete WebAssembly module, as hex: two hexadecimal digits for each byte.
+
+00 61 73 6d 01 00 00 00 01 05 01 60 00 01 7f 03
+02 01 00 05 03 01 00 01 07 08 01 04 6d 61 69 6e
+00 00 0a 26 01 24 01 02 7f 41 0a 21 01 03 40 20
+01 45 04 40 05 20 01 41 01 6b 21 01 20 00 41 02
+6a 21 00 0c 01 0b 0b 20 00 0b
+
+What signed integer does main() return? Reply with just the number.

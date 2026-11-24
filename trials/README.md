@@ -30,6 +30,8 @@ For the larger `digit_sum` task, follow the same steps with `digits` in place of
 
 A `ui` trial is a whole HTML page, not hex. Its prompt comes from `bin/wasm-bytes prompt ui`, and `bin/wasm-bytes check ui trials/ui/<label>/reply.txt` checks it in Chrome. The check needs Node and Chrome. The `ui` prompt has changed once, to describe how the page looks. Each trial's `prompt.txt` holds the version it received, and the site groups the pages by it. The first version is kept as `prompts/ui.first.txt`, with its guided form beside it, and the trials that received it name it with `{prompt_file, "prompts/ui.first.txt"}.` in `fixture.config`. [Browser checks](../doc/ui.md)
 
+A reply to a case of the reading and writing tracks lives under `trials/cases/<case id>/<label>/`, with the same files. Its prompt comes from `bin/wasm-bytes prompt case <case id>`, and `bin/wasm-bytes check case <case id> <reply>` checks it. `scripts/record-claude-cases.sh` records a whole track with the Claude Code CLI. [Reading and writing tracks](../doc/datasets.md)
+
 The DX-Ball pair works the same way. Use `pan` for the first prompt, then `reverse` with `{base, "pan/<label>"}.` for the second. The second prompt comes from `bin/wasm-bytes prompt reverse --base trials/pan/<label>/reply.txt`.
 
 For a revision, start with a passing write trial. Create `trials/revise/<label>/` and save the output of `bin/wasm-bytes prompt revise --base trials/write/<base-label>/reply.txt` as its prompt. Send it, save the raw reply, and check it with that same base. Include the same fields in its config and add `{base, "write/<base-label>"}.` using the actual write label.

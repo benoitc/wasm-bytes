@@ -6,7 +6,7 @@
 %% the profile; a candidate that has them is still checked by its answers.
 -module(wb_profile).
 
--export([check/2, format_violation/1, signature/1]).
+-export([check/2, check_open/3, format_violation/1, signature/1]).
 
 -export_type([violation/0]).
 
@@ -41,6 +41,21 @@ check(Bytes, TaskName) ->
     case Violations of
         [] -> ok;
         _ -> {error, Violations}
+    end.
+
+%% The open profile, for a write case: the module must export `Export' with
+%% the signature `Want' and import nothing, since nothing is provided. It may
+%% define other functions, a memory, or a start function; the calls decide.
+-spec check_open(binary(), binary(), {[atom()], [atom()]}) -> ok | {error, [violation()]}.
+check_open(Bytes, Export, Want) ->
+    {ok, Sections} = wb_layout:sections(Bytes),
+    Imports = lists:sum([wb_layout:count(Bytes, S) || S <- wb_layout:find(2, Sections)]),
+    Exports = lists:append([wb_layout:exports(Bytes, S) || S <- wb_layout:find(7, Sections)]),
+    Named = [V || V <- export_violations(Bytes, Exports, Export, Want),
+                  element(1, V) =/= unexpected_exports],
+    case [{imports, Imports} || Imports > 0] ++ Named of
+        [] -> ok;
+        Violations -> {error, Violations}
     end.
 
 export_violations(Bytes, Exports, Export, Want) ->
