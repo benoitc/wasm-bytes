@@ -2,6 +2,8 @@
 -- site renders goes to its HTML; README.md is the site's index. A link to
 -- anything else in the repository, such as a source file or a recorded
 -- reply, goes to it on GitHub. Images stay relative: the build copies them.
+-- A full link to the published site, which the README needs on GitHub,
+-- becomes a link within the site, so a local build stays local.
 -- Links in raw HTML are rewritten the same way.
 local function is_page(path)
   return path == "README.md" or path == "trials/README.md"
@@ -12,8 +14,18 @@ function Pandoc(doc)
   local source = pandoc.utils.stringify(doc.meta.source)
   local repo = pandoc.utils.stringify(doc.meta.repo)
   local dir = pandoc.path.directory(source)
+  local owner, name = repo:match("github%.com/([^/]+)/([^/]+)")
+  local site = "https://" .. owner .. ".github.io/" .. name .. "/"
+  local up = ""
+  if dir ~= "." and dir ~= "" then
+    up = string.rep("../", #pandoc.path.split(dir))
+  end
 
   local function resolve(target)
+    if target:sub(1, #site) == site then
+      local rest = target:sub(#site + 1)
+      return up .. (rest == "" and "index.html" or rest)
+    end
     if target:match("^%a[%w+.-]*:") or target:match("^#") then
       return target
     end
